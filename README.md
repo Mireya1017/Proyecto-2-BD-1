@@ -14,7 +14,7 @@ Los siguientes pasos crean únicamente la base de datos. No requieren ejecutar l
 
 #### 1. Localizar los archivos
 
-Abrir la carpeta del repositorio y comprobar que dentro de `bd/` estén estos cinco archivos:
+Abrir la carpeta del repositorio y comprobar que dentro de `sql_datos/` estén estos cinco archivos:
 
 - `estructura.sql`
 - `restricciones.sql`
@@ -151,3 +151,175 @@ El campo `id_usuario` puede aparecer en `NULL`, porque la carga se ejecuta direc
 - No se crean usuarios, clientes, reservas, visitas ni ventas iniciales.
 - Las consultas de comprobación no modifican los datos.
 - Si los cinco archivos terminan sin errores y las comprobaciones coinciden, la creación y carga inicial quedaron completadas.
+## Conexión compartida con Python
+
+Esta parte permite conectar Python con PostgreSQL, compartir los datos de sesión y ejecutar operaciones dentro de una transacción.
+
+### 1. Preparar Python
+
+Tener Python 3.10 o superior instalado.
+
+Abrir la carpeta del repositorio en VS Code y utilizar una terminal Git Bash.
+
+La terminal debe estar en la raíz de `Proyecto-2-BD-1`, donde están `README.md` y `requirements.txt`.
+
+Comprobar Python:
+
+```bash
+python --version
+```
+
+Crear el entorno virtual, si todavía no existe:
+
+```bash
+python -m venv .venv
+```
+
+Activarlo:
+
+```bash
+source .venv/Scripts/activate
+```
+
+Debe aparecer `(.venv)` en la terminal. Activarlo cada vez que se abra una terminal nueva para trabajar con el proyecto.
+
+### 2. Instalar las dependencias
+
+Con el entorno activo, ejecutar:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+El archivo instala Psycopg, la librería utilizada para conectar Python con PostgreSQL.
+
+Comprobar su instalación:
+
+```bash
+python -c "import psycopg; print(psycopg.__version__)"
+```
+
+Con las dependencias actuales debe mostrar `3.3.6`.
+
+### 3. Configurar la conexión
+
+En la raíz del repositorio, copiar `config.example.ini` y nombrar la copia `config.ini`.
+
+Si ya existe `config.ini`, editarlo en lugar de reemplazarlo.
+
+Completar sus valores:
+
+```ini
+[postgresql]
+host = localhost
+port = 5432
+dbname = restaurante_prueba
+user = postgres
+password = CAMBIAR_AQUI
+```
+
+- `host`: dirección del servidor PostgreSQL. Para una instalación local se utiliza `localhost`.
+- `port`: puerto configurado en PostgreSQL.
+- `dbname`: nombre exacto de la base creada y cargada siguiendo los pasos de SQL. Si se utilizó otro nombre, reemplazar `restaurante_prueba`.
+- `user`: usuario de PostgreSQL con acceso a esa base.
+- `password`: contraseña de ese usuario.
+
+El usuario de PostgreSQL es distinto de los usuarios de la aplicación almacenados en la tabla `usuario`.
+
+Guardar el archivo antes de ejecutar las pruebas.
+
+`config.ini` es una configuración personal y está excluido de Git mediante `.gitignore`. El archivo `config.example.ini` sí se conserva en el repositorio para que cada integrante prepare su configuración.
+
+### 4. Archivos compartidos
+
+Los archivos Python están en `funcionalidades_py/`.
+
+- `conexion.py`: contiene `obtener_conexion()`, que lee `config.ini` y abre una conexión.
+- `sesion.py`: contiene `crear_sesion(p_id_usuario, p_rol, p_id_sucursal)`, que devuelve un diccionario con esos tres datos.
+- `transacciones.py`: contiene `establecer_usuario_bitacora()` y `ejecutar_transaccion()`.
+
+`crear_sesion()` organiza los datos y comprueba que el rol sea válido. No verifica contraseñas ni realiza el inicio de sesión.
+
+El módulo de autenticación debe construir la sesión utilizando los datos reales del usuario después de validar sus credenciales.
+
+### 5. Ejecutar las pruebas
+
+Ejecutar los comandos desde la raíz del repositorio, con el entorno virtual activo y PostgreSQL en funcionamiento.
+
+Primero comprobar la conexión:
+
+```bash
+python -m funcionalidades_py.prueba_conexion
+```
+
+Debe mostrar una conexión exitosa, el nombre de la base indicada en `config.ini` y el usuario de PostgreSQL.
+
+Comprobar la estructura de la sesión:
+
+```bash
+python -m funcionalidades_py.prueba_sesion
+```
+
+Debe mostrar el usuario de ejemplo `1`, el rol `gerente` y la sucursal `2`.
+
+Comprobar el contexto del usuario de bitácora:
+
+```bash
+python -m funcionalidades_py.prueba_transacciones
+```
+
+Debe mostrar el identificador `1` dentro de la transacción y `None` después del rollback.
+
+Comprobar la ejecución compartida y el manejo de errores:
+
+```bash
+python -m funcionalidades_py.prueba_operacion
+```
+
+Debe encontrar Oakland Mall, mostrar un error intencional de división por cero y realizar otra consulta exitosa después del error.
+
+La división por cero es parte de la prueba; no indica un fallo de instalación.
+
+Estas pruebas no modifican las tablas. Las sesiones utilizadas son ejemplos en memoria y no representan un inicio de sesión real ni comprueban la existencia de esos usuarios.
+
+### 6. Acuerdo para utilizar las transacciones
+
+Los módulos deben utilizar:
+
+```python
+ejecutar_transaccion(p_sesion, p_operacion, p_datos)
+```
+
+Sus parámetros son:
+
+- `p_sesion`: diccionario del usuario autenticado.
+- `p_operacion`: función que realizará la operación.
+- `p_datos`: diccionario con los datos necesarios.
+
+La función recibida como operación debe aceptar tres parámetros, en este orden:
+
+```python
+def nombre_operacion(p_conexion, p_sesion, p_datos):
+```
+
+Al pasarla a `ejecutar_transaccion`, se escribe su nombre sin paréntesis.
+
+La operación debe:
+
+- Utilizar la conexión recibida.
+- Comprobar los permisos y la sucursal que correspondan.
+- Ejecutar consultas con parámetros.
+- Devolver el resultado necesario.
+- Permitir que los errores lleguen al manejador compartido.
+
+No debe abrir otra conexión ni ejecutar `commit`, `rollback` o `close`.
+
+`ejecutar_transaccion()` establece el usuario responsable para la bitácora, ejecuta la operación, confirma con `commit` si termina correctamente y revierte con `rollback` si falla. Finalmente cierra la conexión.
+
+El resultado se devuelve después de que el commit termina correctamente. Esto incluye la comprobación de las restricciones diferidas de capacidad y horarios.
+La consola debe capturar los errores comunicados y mostrarlos al usuario.
+
+### 7. Uso con usuarios reales
+
+Antes de registrar cambios auditados, la sesión debe contener un `id_usuario` existente en la tabla `usuario`, obtenido del inicio de sesión real.
+No deben utilizarse las sesiones de ejemplo de los archivos de prueba para registrar operaciones reales. Cada reserva y sus mesas, cada visita y sus mesas, y cada venta con sus detalles y consumo de ingredientes deben ejecutarse dentro de su respectiva transacción completa.
