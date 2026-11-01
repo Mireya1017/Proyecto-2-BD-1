@@ -6,7 +6,7 @@ from funcionalidades_py.consola.consola_clientes import menu_clientes
 from funcionalidades_py.consola.consola_preferencias import menu_preferencias
 from funcionalidades_py.consola.consola_historial import menu_historial
 from funcionalidades_py.consola.consola_reportes import menu_reportes_clientes
-
+from funcionalidades_py.consola.consola_visitas import menu_visitas
 
 def menu_principal(p_sesion):
     rol = p_sesion["rol"]
@@ -27,6 +27,7 @@ def menu_principal(p_sesion):
         print("1. Gestión de clientes")
         print("2. Preferencias de clientes")
         print("3. Historial de clientes")
+        print("5. Gestión de visitas")
 
         if rol == "administrador":
             print("4. Reportes de clientes")
@@ -46,6 +47,9 @@ def menu_principal(p_sesion):
 
         elif opcion == "4" and rol == "administrador":
             menu_reportes_clientes(p_sesion)
+        
+        elif opcion == "5":
+            menu_visitas(p_sesion)
 
         elif opcion == "0":
             print("\nRegresando al inicio de sesión...")

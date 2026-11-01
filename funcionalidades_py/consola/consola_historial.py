@@ -64,8 +64,8 @@ def opcion_consultar_historial(p_sesion):
             for plato in preferencias:
                 print(f"{plato[1]} - Q{plato[2]:.2f}")
 
-    except ValueError:
-        print("Debes ingresar un ID numérico válido.")
+    except ValueError as v_error:
+        print(f"No se pudo consultar el historial: {v_error}")
 
     except Exception as error:
         print(f"No se pudo consultar el historial: {error}")

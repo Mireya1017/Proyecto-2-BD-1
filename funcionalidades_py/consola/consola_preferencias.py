@@ -29,8 +29,8 @@ def opcion_agregar_preferencia(p_sesion):
 
         print(resultado)
 
-    except ValueError:
-        print("Debes ingresar identificadores numéricos válidos.")
+    except ValueError as v_error:
+        print(f"No se pudo agregar la preferencia: {v_error}")
 
     except Exception as error:
         print(f"No se pudo agregar la preferencia: {error}")
@@ -61,8 +61,8 @@ def opcion_consultar_preferencias(p_sesion):
                 f"Precio: Q{plato[2]:.2f}"
             )
 
-    except ValueError:
-        print("Debes ingresar un ID numérico válido.")
+    except ValueError as v_error:
+        print(f"No se pudo agregar la preferencia: {v_error}")
 
     except Exception as error:
         print(f"Error al consultar preferencias: {error}")
