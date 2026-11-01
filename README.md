@@ -183,6 +183,27 @@ source .venv/Scripts/activate
 
 Debe aparecer `(.venv)` en la terminal. Activarlo cada vez que se abra una terminal nueva para trabajar con el proyecto.
 
+Si "source .venv/Scripts/activate" no funciona, ejecutar:
+```bash
+.\.venv\Scripts\Activate.ps1
+```
+
+Y si aparece un error como:
+```bash
+"cannot be loaded because running scripts is disabled on this system"
+```
+
+Ejecutar:
+```bash
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+Esto permite ejecutar scripts temporalmente, solo en esa sesión de PowerShell.
+
+Y volver a intentar:
+```bash
+.\.venv\Scripts\Activate.ps1
+```
+
 ### 2. Instalar las dependencias
 
 Con el entorno activo, ejecutar:
@@ -213,7 +234,7 @@ Completar sus valores:
 [postgresql]
 host = localhost
 port = 5432
-dbname = restaurante_prueba
+dbname = restaurante_prueba O_EL_NOMBRE_DE_LA_BDD
 user = postgres
 password = CAMBIAR_AQUI
 ```
