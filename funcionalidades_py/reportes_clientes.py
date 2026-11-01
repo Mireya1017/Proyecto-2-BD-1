@@ -42,7 +42,7 @@ def top_clientes_frecuentes(p_conexion, p_sesion, p_datos):
 
 # -----------------------------------------------------------
 
-from preferencias import consultar_preferencias
+from funcionalidades_py.preferencias import consultar_preferencias
 
 # Top 5 clientes con más reservas y sus preferencias
 def top_clientes_reservas(p_conexion, p_sesion, p_datos):

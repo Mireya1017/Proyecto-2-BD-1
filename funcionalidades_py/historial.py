@@ -2,7 +2,7 @@
 # Historial de visitas, reservas y visitas, reservas y preferencias (juntos)
 # -----------------------------------------------------------
 
-from preferencias import consultar_preferencias
+from funcionalidades_py.preferencias import consultar_preferencias
 
 # -----------------------------------------------------------
 
