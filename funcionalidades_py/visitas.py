@@ -1,37 +1,5 @@
 # -----------------------------------------------------------
-# Registra visitas, muestra el historial de visitas...
-# -----------------------------------------------------------
-
-# Muestra el historial de cierto cliente usando su ID
-def consultar_visitas_cliente(p_conexion, p_sesion, p_datos):
-    if p_sesion["rol"] not in ("administrador", "gerente", "mesero"):
-        raise PermissionError("No tiene permiso para consultar visitas.")
-
-    id_cliente = p_datos["id_cliente"]
-
-    with p_conexion.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT
-                id_visita,
-                id_cliente,
-                id_sucursal,
-                id_reserva,
-                fecha_hora_llegada,
-                fecha_hora_salida,
-                cantidad_personas,
-                observaciones
-            FROM visita
-            WHERE id_cliente = %s
-            ORDER BY fecha_hora_llegada DESC, id_visita DESC;
-            """,
-            (id_cliente,)
-        )
-
-        visitas = cursor.fetchall()
-
-    return visitas
-
+# Registra visitas
 # -----------------------------------------------------------
 
 def registrar_visita(p_conexion, p_sesion, p_datos):
