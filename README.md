@@ -1,43 +1,77 @@
 # Proyecto-2-BD-1
-Proyecto #2, avances y resultados
 
-### Creación y carga de la base de datos
+Sistema de restaurante con PostgreSQL y Python.
 
-#### Requisitos
+## Estado actual
+
+Se encuentran implementados:
+
+- Creación de la base de datos, restricciones, índices y bitácora.
+- Datos iniciales de Oakland Mall y Ciudad Cayalá.
+- Conexión compartida entre Python y PostgreSQL.
+- Manejo compartido de sesiones y transacciones.
+- Registro, búsqueda y consulta de clientes.
+- Registro y consulta de platos favoritos.
+- Historial de visitas, reservas y preferencias.
+- Registro de visitas con y sin reserva.
+- Consulta de mesas disponibles para una llegada.
+- Registro de salidas y liberación de mesas después de la limpieza.
+- Top 10 de clientes frecuentes por visitas.
+- Top 5 de clientes con más reservas y sus favoritos.
+- Menú de consola para las funcionalidades anteriores.
+
+El acceso actual al menú utiliza una sesión de prueba. Todavía falta integrar la autenticación real, los módulos restantes de reservas, inventario y ventas, y las demás opciones y reportes del sistema.
+
+## Organización del repositorio
+
+- `sql_datos/`: scripts para crear y cargar la base de datos.
+- `funcionalidades_py/`: conexión, transacciones y lógica del sistema.
+- `funcionalidades_py/consola/`: entrada de datos y presentación de resultados.
+- `docs/`: documentación del proyecto.
+- `requirements.txt`: dependencias de Python.
+- `config.example.ini`: ejemplo de configuración.
+- `README.md`: instrucciones de instalación y ejecución.
+
+`config.ini` y `.venv/` son archivos y carpetas locales excluidos de Git.
+
+## 1. Requisitos
 
 - PostgreSQL instalado y su servicio en ejecución.
 - pgAdmin instalado.
-- Acceso al servidor PostgreSQL con un usuario que pueda crear bases de datos.
-- Una copia descargada o clonada de este repositorio.
+- Un usuario de PostgreSQL con permisos para crear la base y sus objetos.
+- Python 3.10 o superior.
+- Una copia descargada o clonada del repositorio.
+- Para los comandos de terminal de esta guía: Windows con Git Bash.
 
-Los siguientes pasos crean únicamente la base de datos. No requieren ejecutar la aplicación de Python.
+Si el repositorio ya está clonado, se puede actualizar desde su carpeta raíz:
 
-#### 1. Localizar los archivos
+```bash
+git switch main
+git pull --ff-only origin main
+```
 
-Abrir la carpeta del repositorio y comprobar que dentro de `sql_datos/` estén estos cinco archivos:
+Guardar los cambios locales antes de cambiar de rama. Si Git informa un error, resolverlo antes de continuar.
 
-- `estructura.sql`
-- `restricciones.sql`
-- `indices.sql`
-- `triggers.sql`
-- `datos_iniciales.sql`
+## 2. Crear la base de datos
 
-Utilizar los archivos completos del repositorio.
+Si ya se tiene una base creada y cargada con estos scripts, omitir su creación y pasar a configurar Python.
 
-#### 2. Crear una base vacía
+Para replicar la instalación desde cero:
 
 1. Abrir pgAdmin.
-2. En el panel izquierdo, desplegar `Servers` y conectarse al servidor PostgreSQL.
-3. Introducir la contraseña del servidor si se solicita.
-4. Hacer clic derecho sobre `Databases`.
-5. Seleccionar `Create → Database`.
-6. Escribir `restaurante_prueba` en el nombre y pulsar `Save`.
+2. Conectarse al servidor PostgreSQL.
+3. Hacer clic derecho sobre `Databases`.
+4. Seleccionar `Create → Database`.
+5. Escribir `restaurante_prueba`.
+6. Pulsar `Save`.
 
-Si ese nombre ya existe, crear otra base con un nombre diferente. Debe ser una base nueva y vacía.
+Debe ser una base nueva y vacía. Si ese nombre ya existe, utilizar otro y conservar ese nombre para la configuración posterior.
 
-#### 3. Comprobar la conexión
+En las pruebas del equipo se utilizó `restaurante`. Cada instalación debe configurar el nombre de la base que realmente utilizará.
 
-Hacer clic derecho sobre la base recién creada y seleccionar `Query Tool`.
+### Comprobar la base seleccionada
+
+Hacer clic derecho sobre la base recién creada y abrir `Query Tool`.
 
 Ejecutar:
 
@@ -45,15 +79,21 @@ Ejecutar:
 SELECT current_database();
 ```
 
-El resultado debe coincidir con el nombre de la base que se acaba de crear.
+El resultado debe coincidir con el nombre elegido.
 
-Todos los archivos siguientes deben ejecutarse en esa misma base.
+Todos los scripts y consultas posteriores deben ejecutarse en esa misma base.
 
-#### 4. Ejecutar los archivos
+## 3. Ejecutar los scripts SQL
 
-Desde el Query Tool, utilizar la opción de abrir archivo de la barra de herramientas para abrir cada archivo SQL de la carpeta `bd/`.
+Comprobar que dentro de `sql_datos/` estén:
 
-Ejecutarlos en este orden:
+- `estructura.sql`
+- `restricciones.sql`
+- `indices.sql`
+- `triggers.sql`
+- `datos_iniciales.sql`
+
+Desde el Query Tool, abrir y ejecutar los archivos completos en este orden:
 
 1. `estructura.sql`
 2. `restricciones.sql`
@@ -63,13 +103,13 @@ Ejecutarlos en este orden:
 
 Para cada archivo:
 
-1. Abrirlo en el Query Tool conectado a la base de prueba.
-2. Hacer clic dentro del editor y seleccionar todo su contenido.
-3. Pulsar F5 para ejecutar el archivo completo.
+1. Abrirlo en el Query Tool conectado a la base elegida.
+2. Seleccionar todo su contenido.
+3. Pulsar F5.
 4. Revisar la pestaña `Messages`.
-5. Continuar únicamente si la ejecución terminó sin errores.
+5. Continuar únicamente si terminó sin errores.
 
-Cada archivo incluye `BEGIN` y `COMMIT`. No es necesario agregar instrucciones adicionales para confirmar sus cambios.
+Cada archivo incluye `BEGIN` y `COMMIT`.
 
 Si aparece un error, detener la carga y ejecutar por separado:
 
@@ -77,13 +117,15 @@ Si aparece un error, detener la carga y ejecutar por separado:
 ROLLBACK;
 ```
 
-Corregir la causa antes de continuar. Los archivos anteriores que terminaron correctamente con `COMMIT` ya están guardados y no deben ejecutarse otra vez en esa base.
+Corregir la causa antes de repetir el archivo que falló.
 
-Los scripts se ejecutan una sola vez sobre una base vacía. Para repetir la instalación completa, crear otra base vacía.
+Los archivos anteriores que terminaron correctamente con `COMMIT` ya están guardados y no deben ejecutarse otra vez en esa base.
 
-#### 5. Verificar la estructura y los datos
+Para repetir la instalación completa, utilizar otra base vacía.
 
-Después de ejecutar los cinco archivos, abrir una consulta en la misma base y ejecutar:
+### Comprobar la estructura y los datos iniciales
+
+Después de ejecutar los cinco archivos:
 
 ```sql
 SELECT 'Tablas' AS elemento, COUNT(*) AS cantidad
@@ -110,7 +152,7 @@ UNION ALL
 SELECT 'Lotes', COUNT(*) FROM lote;
 ```
 
-Los resultados esperados son:
+Resultados esperados inmediatamente después de la carga inicial:
 
 - Tablas: 16.
 - Sucursales: 2.
@@ -120,11 +162,13 @@ Los resultados esperados son:
 - Recetas: 21.
 - Lotes: 18.
 
-El orden de las filas del resultado puede variar.
+El orden de las filas puede variar. Las cantidades pueden cambiar después de utilizar el sistema.
 
-#### 6. Verificar la auditoría
+La carga inicial no crea usuarios, clientes, reservas, visitas ni ventas.
 
-Ejecutar:
+Los precios, existencias y caducidades son datos de ejemplo. Las fechas de los lotes dependen del día de ejecución de la carga.
+
+### Comprobar la bitácora
 
 ```sql
 SELECT
@@ -139,29 +183,17 @@ ORDER BY id_bitacora DESC
 LIMIT 10;
 ```
 
-Deben aparecer entradas de las inserciones realizadas durante la carga, con operación `INSERT`.
+Deben aparecer operaciones `INSERT` correspondientes a la carga inicial.
 
-El campo `id_usuario` puede aparecer en `NULL`, porque la carga se ejecuta directamente mediante scripts, sin un usuario autenticado en la aplicación.
+El usuario puede aparecer como `NULL` porque estos scripts se ejecutan sin una sesión de la aplicación.
 
-#### Consideraciones sobre la carga
+La bitácora guarda la identificación del registro afectado; no almacena una copia completa de todos sus campos.
 
-- Los identificadores se generan automáticamente y no deben escribirse manualmente.
-- Los precios, cantidades y caducidades son datos de ejemplo.
-- Las fechas de recepción y caducidad dependen del día en que se ejecuta la carga.
-- No se crean usuarios, clientes, reservas, visitas ni ventas iniciales.
-- Las consultas de comprobación no modifican los datos.
-- Si los cinco archivos terminan sin errores y las comprobaciones coinciden, la creación y carga inicial quedaron completadas.
-## Conexión compartida con Python
+## 4. Preparar Python
 
-Esta parte permite conectar Python con PostgreSQL, compartir los datos de sesión y ejecutar operaciones dentro de una transacción.
+Abrir una terminal Git Bash en la raíz de `Proyecto-2-BD-1`, donde están `README.md` y `requirements.txt`.
 
-### 1. Preparar Python
-
-Tener Python 3.10 o superior instalado.
-
-Abrir la carpeta del repositorio en VS Code y utilizar una terminal Git Bash.
-
-La terminal debe estar en la raíz de `Proyecto-2-BD-1`, donde están `README.md` y `requirements.txt`.
+La raíz es la carpeta del repositorio, independientemente de la rama seleccionada.
 
 Comprobar Python:
 
@@ -169,52 +201,49 @@ Comprobar Python:
 python --version
 ```
 
-Crear el entorno virtual, si todavía no existe:
+Crear el entorno virtual si todavía no existe:
 
 ```bash
 python -m venv .venv
 ```
 
-Activarlo:
+Activarlo en Git Bash:
 
 ```bash
 source .venv/Scripts/activate
 ```
 
-Debe aparecer `(.venv)` en la terminal. Activarlo cada vez que se abra una terminal nueva para trabajar con el proyecto.
+Debe aparecer `(.venv)` en la terminal.
 
-Si "source .venv/Scripts/activate" no funciona, ejecutar:
-```bash
+Activar el entorno cada vez que se abra una terminal nueva.
+
+### Alternativa en PowerShell
+
+Si se utiliza una terminal PowerShell, el comando de activación es:
+
+```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-Y si aparece un error como:
-```bash
-"cannot be loaded because running scripts is disabled on this system"
-```
+Si PowerShell bloquea la ejecución de scripts, ejecutar en esa misma terminal:
 
-Ejecutar:
-```bash
+```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
-Esto permite ejecutar scripts temporalmente, solo en esa sesión de PowerShell.
 
-Y volver a intentar:
-```bash
-.\.venv\Scripts\Activate.ps1
-```
+Después repetir el comando de activación.
 
-### 2. Instalar las dependencias
+Este ajuste se aplica únicamente a esa sesión de PowerShell. Los comandos anteriores de PowerShell no se ejecutan en Git Bash.
 
-Con el entorno activo, ejecutar:
+### Instalar dependencias
+
+Con el entorno activo:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-El archivo instala Psycopg, la librería utilizada para conectar Python con PostgreSQL.
-
-Comprobar su instalación:
+Comprobar Psycopg:
 
 ```bash
 python -c "import psycopg; print(psycopg.__version__)"
@@ -222,11 +251,17 @@ python -c "import psycopg; print(psycopg.__version__)"
 
 Con las dependencias actuales debe mostrar `3.3.6`.
 
-### 3. Configurar la conexión
+## 5. Configurar la conexión
 
 En la raíz del repositorio, copiar `config.example.ini` y nombrar la copia `config.ini`.
 
-Si ya existe `config.ini`, editarlo en lugar de reemplazarlo.
+Desde Git Bash, si todavía no existe:
+
+```bash
+cp config.example.ini config.ini
+```
+
+Si ya existe, editarlo sin reemplazarlo.
 
 Completar sus valores:
 
@@ -234,56 +269,76 @@ Completar sus valores:
 [postgresql]
 host = localhost
 port = 5432
-dbname = restaurante_prueba O_EL_NOMBRE_DE_LA_BDD
+dbname = restaurante_prueba
 user = postgres
 password = CAMBIAR_AQUI
 ```
 
-- `host`: dirección del servidor PostgreSQL. Para una instalación local se utiliza `localhost`.
-- `port`: puerto configurado en PostgreSQL.
-- `dbname`: nombre exacto de la base creada y cargada siguiendo los pasos de SQL. Si se utilizó otro nombre, reemplazar `restaurante_prueba`.
-- `user`: usuario de PostgreSQL con acceso a esa base.
+- `host`: dirección del servidor PostgreSQL.
+- `port`: puerto de ese servidor.
+- `dbname`: nombre exacto de la base creada y cargada.
+- `user`: usuario de PostgreSQL con acceso a la base.
 - `password`: contraseña de ese usuario.
+
+Si se utilizará la base `restaurante`, escribir:
+
+```ini
+dbname = restaurante
+```
+
+Guardar el archivo.
 
 El usuario de PostgreSQL es distinto de los usuarios de la aplicación almacenados en la tabla `usuario`.
 
-Guardar el archivo antes de ejecutar las pruebas.
+`config.ini` es personal y no debe subirse a Git. `config.example.ini` debe contener únicamente valores de ejemplo.
 
-`config.ini` es una configuración personal y está excluido de Git mediante `.gitignore`. El archivo `config.example.ini` sí se conserva en el repositorio para que cada integrante prepare su configuración.
+### Verificar la conexión
 
-### 4. Archivos compartidos
-
-Los archivos Python están en `funcionalidades_py/`.
-
-- `conexion.py`: contiene `obtener_conexion()`, que lee `config.ini` y abre una conexión.
-- `sesion.py`: contiene `crear_sesion(p_id_usuario, p_rol, p_id_sucursal)`, que devuelve un diccionario con esos tres datos.
-- `transacciones.py`: contiene `establecer_usuario_bitacora()` y `ejecutar_transaccion()`.
-
-`crear_sesion()` organiza los datos y comprueba que el rol sea válido. No verifica contraseñas ni realiza el inicio de sesión.
-
-El módulo de autenticación debe construir la sesión utilizando los datos reales del usuario después de validar sus credenciales.
-
-### 5. Ejecutar las pruebas
-
-Ejecutar los comandos desde la raíz del repositorio, con el entorno virtual activo y PostgreSQL en funcionamiento.
-
-Primero comprobar la conexión:
+Desde la raíz del repositorio:
 
 ```bash
 python -m funcionalidades_py.prueba_conexion
 ```
 
-Debe mostrar una conexión exitosa, el nombre de la base indicada en `config.ini` y el usuario de PostgreSQL.
+Debe mostrar:
 
-Comprobar la estructura de la sesión:
+- Conexión exitosa.
+- Nombre de la base configurada.
+- Usuario de PostgreSQL.
+
+Al consultar datos desde pgAdmin, abrir exactamente esa misma base. También deben coincidir el servidor y el puerto.
+
+Los datos de una base no se comparten automáticamente con otra base ni con las computadoras de los demás integrantes.
+
+## 6. Comprobaciones de Python
+
+### Sintaxis e imports
+
+```bash
+python -m compileall funcionalidades_py
+```
+
+No deben aparecer errores de sintaxis o sangría.
+
+Comprobar los imports del menú:
+
+```bash
+python -c "from funcionalidades_py.menu_principal import menu_principal; print('Menú e imports cargados correctamente')"
+```
+
+Estas comprobaciones no validan por sí solas las consultas ni el funcionamiento completo con PostgreSQL.
+
+### Sesión de ejemplo
 
 ```bash
 python -m funcionalidades_py.prueba_sesion
 ```
 
-Debe mostrar el usuario de ejemplo `1`, el rol `gerente` y la sucursal `2`.
+Debe mostrar el usuario de ejemplo `1`, rol `gerente` y sucursal `2`.
 
-Comprobar el contexto del usuario de bitácora:
+Esta prueba construye un diccionario en memoria; no crea un usuario ni comprueba sus credenciales.
+
+### Contexto de bitácora
 
 ```bash
 python -m funcionalidades_py.prueba_transacciones
@@ -291,7 +346,7 @@ python -m funcionalidades_py.prueba_transacciones
 
 Debe mostrar el identificador `1` dentro de la transacción y `None` después del rollback.
 
-Comprobar la ejecución compartida y el manejo de errores:
+### Manejo de errores
 
 ```bash
 python -m funcionalidades_py.prueba_operacion
@@ -299,48 +354,260 @@ python -m funcionalidades_py.prueba_operacion
 
 Debe encontrar Oakland Mall, mostrar un error intencional de división por cero y realizar otra consulta exitosa después del error.
 
-La división por cero es parte de la prueba; no indica un fallo de instalación.
+La división por cero forma parte de la prueba.
 
-Estas pruebas no modifican las tablas. Las sesiones utilizadas son ejemplos en memoria y no representan un inicio de sesión real ni comprueban la existencia de esos usuarios.
+Los cuatro módulos de prueba de conexión, sesión, contexto y operación no modifican las tablas. Sus identificadores de ejemplo no deben utilizarse como sesiones autenticadas.
 
-### 6. Acuerdo para utilizar las transacciones
+## 7. Preparar el usuario para probar el menú
 
-Los módulos deben utilizar:
+La carga SQL inicial no crea usuarios.
+
+Mientras se integra la autenticación real, ejecutar:
+
+```bash
+python -m funcionalidades_py.preparar_usuario_prueba
+```
+
+Este script:
+
+- Busca la sucursal Oakland Mall.
+- Crea el usuario `prueba_revision_yu` con rol `administrador`.
+- Guarda un hash generado a partir de una contraseña aleatoria.
+- Muestra el identificador real del usuario y su sucursal.
+- Si el nombre ya existe, conserva ese usuario y muestra sus datos.
+
+Este comando sí guarda información en PostgreSQL. La creación inicial puede quedar auditada con usuario `NULL`, porque todavía no hay una sesión de aplicación establecida.
+
+No se debe asumir que el identificador generado será `1`.
+
+Este usuario se utiliza mediante el acceso de prueba descrito a continuación. No se proporciona una contraseña para iniciar sesión con él.
+
+El formato de hash utilizado por este script deberá coordinarse con el mecanismo definitivo de autenticación antes de reutilizarlo para cuentas reales.
+
+## 8. Abrir el menú de prueba
+
+Ejecutar:
+
+```bash
+python -m funcionalidades_py.prueba_menu
+```
+
+El script busca `prueba_revision_yu`, toma su ID, rol y sucursal y construye la sesión.
+
+Debe mostrar:
+
+```text
+MODO DE PRUEBA: sesión sin autenticación.
+```
+
+Este acceso permite probar las funcionalidades implementadas. No valida credenciales ni sustituye el inicio de sesión definitivo.
+
+Las operaciones que se completen correctamente desde el menú sí se guardan en la base configurada.
+
+### Opciones disponibles
+
+- `1`: gestión de clientes.
+- `2`: preferencias de clientes.
+- `3`: historial de clientes.
+- `4`: reportes de clientes, visible para el administrador.
+- `5`: gestión de visitas.
+- `0`: salir del menú principal.
+
+La opción `0` de cada submenú regresa al menú principal.
+
+Después de modificar código, guardar los archivos y salir del programa antes de ejecutarlo de nuevo.
+
+## 9. Uso de las funcionalidades
+
+### Clientes
+
+Permite registrar nombre y teléfono opcional, buscar por nombre y consultar por ID.
+
+El nombre es obligatorio y admite hasta 120 caracteres. El teléfono admite hasta 20 caracteres.
+
+El teléfono vacío se guarda como `NULL`.
+
+La búsqueda por nombre no distingue mayúsculas de minúsculas y permite coincidencias parciales. Una búsqueda vacía devuelve todos los clientes.
+
+Los clientes son compartidos entre sucursales.
+
+### Preferencias
+
+Permite agregar y consultar los productos favoritos de un cliente utilizando sus identificadores.
+
+Para consultar los productos disponibles desde pgAdmin:
+
+```sql
+SELECT id_plato, nombre, precio
+FROM plato
+ORDER BY id_plato;
+```
+
+Una misma combinación de cliente y producto no puede repetirse.
+
+El cliente y el producto deben existir. Las preferencias son compartidas entre sucursales.
+
+### Historial
+
+Muestra visitas, reservas y platos favoritos.
+
+- El administrador consulta visitas y reservas de todas las sucursales.
+- Gerente y mesero consultan únicamente las de su sucursal.
+- Los favoritos del cliente se mantienen compartidos.
+
+Si el cliente no existe, se informa el error.
+
+### Registrar una llegada
+
+En gestión de visitas, seleccionar registrar llegada.
+
+Ingresar:
+
+1. ID del cliente existente.
+2. ID de sucursal, si la sesión es de administrador. Para otros roles se utiliza su sucursal.
+3. Cantidad de personas.
+4. ID de reserva, o dejar vacío si no tiene.
+5. IDs de mesas separados por coma.
+6. Observaciones opcionales.
+
+Antes de solicitar las mesas, el programa muestra su ID, número, capacidad y zona.
+
+Se ingresan los valores de `id_mesa`, no el número de mesa dentro de la sucursal.
+
+Las mesas deben:
+
+- Pertenecer a la sucursal.
+- Estar en la misma zona.
+- Tener capacidad conjunta suficiente.
+- Estar liberadas.
+- No estar asignadas a otra reserva vigente en ese momento.
+
+El personal determina cuáles pueden juntarse físicamente.
+
+Si se indica una reserva, debe estar confirmada y pertenecer al cliente y a la sucursal seleccionados.
+
+La visita, sus mesas y el cambio de la reserva a `atendida` se guardan dentro de una misma transacción.
+
+La consulta de disponibilidad actual no estima si la visita terminará antes de una reserva futura.
+
+### Salida y liberación
+
+Primero registrar la salida utilizando el ID de visita.
+
+La salida no libera automáticamente las mesas.
+
+Después de limpiarlas, seleccionar liberar mesa e ingresar el ID de visita y el ID de mesa.
+
+El sistema impide liberar una mesa antes de registrar la salida.
+
+### Reportes de clientes
+
+Disponibles únicamente para administrador:
+
+- Top 10 de clientes frecuentes, contado por visitas.
+- Top 5 de clientes con más reservas, incluyendo sus favoritos.
+
+Ingresar las fechas en formato:
+
+```text
+AAAA-MM-DD
+```
+
+La fecha final es inclusiva. Para consultar un solo día, ingresar la misma fecha como inicial y final.
+
+El Top 5 excluye reservas canceladas; incluye los demás estados.
+
+Los reportes consideran todas las sucursales. Los empates se ordenan por ID del cliente.
+
+En una instalación nueva pueden no existir visitas o reservas. En ese caso se muestra un mensaje sin resultados.
+
+## 10. Transacciones y bitácora
+
+Los módulos utilizan:
 
 ```python
 ejecutar_transaccion(p_sesion, p_operacion, p_datos)
 ```
 
-Sus parámetros son:
-
-- `p_sesion`: diccionario del usuario autenticado.
-- `p_operacion`: función que realizará la operación.
-- `p_datos`: diccionario con los datos necesarios.
-
-La función recibida como operación debe aceptar tres parámetros, en este orden:
+La función recibida como operación debe aceptar:
 
 ```python
 def nombre_operacion(p_conexion, p_sesion, p_datos):
 ```
 
-Al pasarla a `ejecutar_transaccion`, se escribe su nombre sin paréntesis.
+Se pasa su nombre sin paréntesis.
 
 La operación debe:
 
 - Utilizar la conexión recibida.
-- Comprobar los permisos y la sucursal que correspondan.
-- Ejecutar consultas con parámetros.
+- Comprobar permisos y sucursal.
+- Ejecutar SQL con parámetros.
 - Devolver el resultado necesario.
-- Permitir que los errores lleguen al manejador compartido.
+- Propagar los errores al manejador compartido.
 
 No debe abrir otra conexión ni ejecutar `commit`, `rollback` o `close`.
 
-`ejecutar_transaccion()` establece el usuario responsable para la bitácora, ejecuta la operación, confirma con `commit` si termina correctamente y revierte con `rollback` si falla. Finalmente cierra la conexión.
+El manejador compartido establece el usuario para la bitácora, ejecuta la operación y confirma los cambios con `commit`.
 
-El resultado se devuelve después de que el commit termina correctamente. Esto incluye la comprobación de las restricciones diferidas de capacidad y horarios.
-La consola debe capturar los errores comunicados y mostrarlos al usuario.
+Si falla, ejecuta `rollback` y comunica el error. Finalmente cierra la conexión.
 
-### 7. Uso con usuarios reales
+La confirmación también comprueba las restricciones diferidas.
 
-Antes de registrar cambios auditados, la sesión debe contener un `id_usuario` existente en la tabla `usuario`, obtenido del inicio de sesión real.
-No deben utilizarse las sesiones de ejemplo de los archivos de prueba para registrar operaciones reales. Cada reserva y sus mesas, cada visita y sus mesas, y cada venta con sus detalles y consumo de ingredientes deben ejecutarse dentro de su respectiva transacción completa.
+Los pasos que forman una sola operación deben utilizar la misma conexión y transacción. Por ejemplo:
+
+- Reserva y asignación de mesas.
+- Visita, asignación de mesas y actualización de reserva.
+- Venta, detalles y descuento de ingredientes, cuando se integre ese módulo.
+
+No se requiere desarrollar escenarios adicionales de reservas simultáneas de mesas. Se mantienen las validaciones normales de disponibilidad y las transacciones.
+
+### Verificar una operación auditada
+
+Después de registrar un cliente desde el menú:
+
+```sql
+SELECT
+    id_usuario,
+    tabla,
+    registro,
+    operacion,
+    fecha_hora
+FROM bitacora
+WHERE tabla = 'cliente'
+ORDER BY id_bitacora DESC
+LIMIT 10;
+```
+
+La inserción debe tener el ID del usuario de la sesión utilizada.
+
+Las operaciones revertidas no deben dejar cambios ni entradas de bitácora confirmadas.
+
+## 11. Pruebas realizadas y pendientes
+
+Durante la revisión se comprobaron:
+
+- Sintaxis e imports.
+- Conexión con PostgreSQL.
+- Registro y consulta de clientes.
+- Auditoría de una inserción realizada desde Python.
+- Consulta de favoritos y rechazo de favoritos duplicados.
+- Historial y filtro por sucursal.
+- Consulta de mesas disponibles.
+- Llegadas con y sin reserva.
+- Cambio de reserva a `atendida`.
+- Rechazo de liberación antes de registrar la salida.
+- Registro de salida y liberación posterior.
+- Reportes de clientes con datos y sin resultados.
+
+Estas comprobaciones se realizaron con una sesión de prueba. No equivalen a una validación completa del sistema integrado.
+
+Queda pendiente:
+
+- Conectar la autenticación real.
+- Integrar los módulos restantes de reservas, inventario y ventas.
+- Coordinar la disponibilidad utilizada por reservas y llegadas.
+- Agregar las opciones y reportes restantes al menú.
+- Probar los flujos completos con usuarios autenticados y sus permisos.
+- Actualizar estas instrucciones al incorporar los módulos restantes.
+
+Los registros creados durante las pruebas son locales. Subir código a Git no sube los datos de PostgreSQL.
