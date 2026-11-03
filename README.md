@@ -613,19 +613,131 @@ Queda pendiente:
 Los registros creados durante las pruebas son locales. Subir código a Git no sube los datos de PostgreSQL.
 
 
+## 12. Usuarios, autenticación y reservas
 
-### 12. Módulos implementados
-- `funcionalidades_py/usuarios.py`: Hash y verificación de contraseñas (`PBKDF2-HMAC-SHA256` con sal aleatoria de 16 bytes), creación inicial del primer administrador sin sesión previa (`id_usuario = NULL` en bitácora), registro de usuarios, inicio/cierre de sesión integrado con `sesion.py` y validación de permisos por rol y sucursal.
-- `funcionalidades_py/reservas.py`: Consulta compartida de disponibilidad de mesas por sucursal, horario y zona; registro, búsqueda, modificación (reemplazo de mesas en la misma transacción) y cancelación de reservas integrada con `ejecutar_transaccion`.
-- `funcionalidades_py/administracion.py`: Consulta de bitácora para administradores con filtros combinables y reporte de sucursales mediante CTEs.
-- `funcionalidades_py/consola_pablo.py`: Menús de consola desacoplados de la lógica de negocio listos para conectarse al menú principal.
+Se encuentran integrados:
 
-### 13. Creación del primer administrador e inicio de sesión
-Con la base de datos recién creada (sin usuarios en la carga inicial), ejecute `pantalla_configurar_primer_admin()` desde el menú inicial para registrar al primer administrador indicando su sucursal habitual. Posteriormente, inicie sesión con `pantalla_iniciar_sesion()`.
+- Registro del primer administrador cuando la tabla `usuario` está vacía.
+- Registro de usuarios desde una sesión de administrador.
+- Protección de contraseñas mediante PBKDF2-HMAC-SHA256 con sal aleatoria.
+- Inicio y cierre de sesión.
+- Validación de permisos por rol y sucursal.
+- Consulta de disponibilidad de mesas por sucursal, horario y zona.
+- Registro, búsqueda y modificación de reservas.
+- Cancelación y registro de inasistencia, conservando las mesas históricas.
+- Consulta administrativa de bitácora.
+- Reporte de reservas y ventas por sucursal.
 
-### 14. Permisos aplicados en las operaciones
-- **Administrador**: Acceso a todas las sucursales, gestión de usuarios, consulta de bitácora y los cinco reportes.
-- **Gerente y Mesero**: Operaciones de reservas restringidas exclusivamente a su `id_sucursal` habitual.
+Los archivos principales son:
 
-### 15. Criterio del Reporte de Sucursales
-El reporte calcula por separado las reservas no canceladas (`reservas_agrupadas`) y las ventas con su importe (`ventas_agrupadas` a partir de `venta`, `visita` y `detalle_venta`) utilizando expresiones de tabla comunes (`CTE`) antes de hacer `LEFT JOIN` con `sucursal`, evitando que el cruce entre reservas y ventas multiplique las cantidades o los importes vendidos.git 
+- `funcionalidades_py/usuarios.py`
+- `funcionalidades_py/reservas.py`
+- `funcionalidades_py/administracion.py`
+- `funcionalidades_py/consola/consola_pablo.py`
+- `funcionalidades_py/inicio.py`
+
+### Acceso mediante autenticación real
+
+Con el entorno virtual activo y la conexión configurada, ejecutar desde la raíz:
+
+```bash
+python -m funcionalidades_py.inicio
+```
+
+Para una instalación nueva:
+
+1. Seleccionar `2. Crear primer administrador`.
+2. Ingresar nombre de usuario, contraseña, confirmación y sucursal habitual.
+3. Seleccionar `1. Iniciar sesión`.
+4. Ingresar las credenciales recién creadas.
+
+La creación del primer administrador solo funciona cuando no existen usuarios.
+
+Si ya existen usuarios, iniciar sesión con una cuenta disponible. Un administrador autenticado puede crear las demás cuentas desde gestión de usuarios.
+
+El programa definitivo utiliza este acceso. `prueba_menu.py` es una herramienta de pruebas que omite la autenticación.
+
+### Opciones integradas del menú
+
+- `1`: gestión de clientes.
+- `2`: preferencias.
+- `3`: historial de clientes.
+- `4`: reportes de clientes, solo administrador.
+- `5`: gestión de visitas.
+- `6`: gestión de usuarios, solo administrador.
+- `7`: gestión de reservas.
+- `8`: administración, solo administrador.
+- `0`: cerrar sesión.
+
+### Permisos
+
+El administrador puede operar sobre todas las sucursales y gestionar usuarios.
+
+Gerente y mesero tienen restringidas las operaciones de reservas y visitas a su sucursal.
+
+La bitácora y los reportes administrativos están restringidos al administrador.
+
+### Reporte de sucursales
+
+Agrupa reservas y ventas por separado mediante CTEs antes de combinar sus resultados. Así evita multiplicar cantidades e importes.
+
+Por defecto excluye las reservas canceladas. Los importes utilizan el precio guardado en cada detalle de venta.
+
+Las fechas finales ingresadas en las consultas administrativas incluyen el día completo.
+
+## 13. Inventario y ventas
+
+Los módulos están desarrollados y se encuentran en revisión para integrarlos al menú principal.
+
+### Funcionalidades
+
+- Existencias utilizables por sucursal, excluyendo lotes vencidos.
+- Consulta de lotes y fechas de caducidad.
+- Entradas directas de inventario.
+- Alertas por existencias inferiores al mínimo.
+- Alertas de próxima caducidad, con ventana provisional de siete días.
+- Porcentaje disponible respecto al stock inicial de referencia.
+- Ventas asociadas a visitas abiertas.
+- Consumo conjunto de ingredientes de todos los productos de la venta.
+- Consumo FEFO: primero los lotes que caducan antes, con desempate por ID.
+- Registro de precios históricos en los detalles de venta.
+- Top 10 de productos por unidades vendidas.
+- Reporte de caducidades por mes y alertas de existencias actuales.
+
+Cada entrada o venta se ejecuta mediante el manejador compartido de transacciones.
+
+Una venta guarda cabecera, detalles y descuento de ingredientes en la misma transacción. Si falla, sus cambios deben revertirse.
+
+### Integración pendiente
+
+La consola `funcionalidades_py/consola/consola_nathalie.py` proporciona:
+
+- `menu_inventario(p_sesion)`
+- `menu_ventas(p_sesion)`
+- `menu_reportes_nathalie(p_sesion)`
+
+Inventario permite administrador y gerente, respetando la sucursal del gerente.
+
+Ventas permite administrador, gerente y mesero, respetando la sucursal de la visita.
+
+Los reportes permiten únicamente administrador.
+
+Las sesiones deben proceder del inicio de sesión real.
+
+### Interpretaciones y limitaciones
+
+El 15 % utiliza como referencia las cantidades de la carga inicial. Es una interpretación documentada del equipo: la guía no define expresamente la base del porcentaje.
+
+Los insumos sin referencia conservan su consulta de existencias y alerta por mínimo, pero no tienen un porcentaje calculado.
+
+El reporte mensual selecciona lotes por su fecha de caducidad. Las cantidades y alertas de existencias corresponden al momento de consulta, no al cierre histórico del mes.
+
+### Validación
+
+La entrega incluye pruebas individuales de entradas, ventas, FEFO, auditoría, reportes y reversión de transacciones.
+
+Después de los ajustes y la integración se comprobarán los flujos en la base local utilizada por el equipo.
+
+Los IDs, cantidades y resultados de las pruebas individuales no deben asumirse como datos presentes en otras instalaciones.
+
+Consultar `docs/modulo_nathalie.md` para los contratos de las funciones.
