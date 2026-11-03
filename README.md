@@ -611,3 +611,73 @@ Queda pendiente:
 - Actualizar estas instrucciones al incorporar los módulos restantes.
 
 Los registros creados durante las pruebas son locales. Subir código a Git no sube los datos de PostgreSQL.
+
+
+## Módulo de inventario y ventas — Nathalie
+
+**Estado:** implementado y probado individualmente en la rama `nathalie-inventario-ventas`. Pendiente de integración con el menú principal y los demás módulos del sistema.
+
+### Funcionalidades implementadas
+
+**Inventario**
+- Consulta de existencias por sucursal, excluyendo lotes vencidos.
+- Consulta de lotes, cantidades y fechas de caducidad.
+- Registro transaccional de entradas de inventario.
+- Alertas por existencias inferiores al mínimo establecido.
+- Alertas de próxima caducidad, con una ventana provisional de siete días.
+- Alertas cuando las existencias alcanzan el 15 % o menos del stock inicial de referencia.
+
+**Ventas**
+- Registro de ventas asociadas a visitas existentes y abiertas.
+- Validación de productos, cantidades y disponibilidad de ingredientes.
+- Cálculo de subtotales y total de venta.
+- Descuento de ingredientes utilizando FEFO (*First Expired, First Out*).
+- Registro de venta, detalles y descuentos dentro de una misma transacción.
+
+**Reportes administrativos**
+- Top 10 de productos más vendidos, ordenados por unidades.
+- Reporte mensual de caducidades, existencias bajas actuales y alertas del 15 %.
+
+### Integración con la consola
+
+El módulo proporciona las siguientes funciones en `funcionalidades_py/consola/consola_nathalie.py`:
+
+```python
+from funcionalidades_py.consola.consola_nathalie import (
+    menu_inventario,
+    menu_ventas,
+    menu_reportes_nathalie
+)
+```
+
+Las tres funciones reciben `p_sesion`, con los datos del usuario autenticado.
+
+Los reportes administrativos están restringidos al rol `administrador`. La gestión de inventario permite los roles `administrador` y `gerente`, respetando las restricciones de sucursal. El registro de ventas admite los roles `administrador`, `gerente` y `mesero`, sujeto a las validaciones de la operación.
+
+### Pruebas realizadas
+
+Se comprobaron las siguientes operaciones en una base local PostgreSQL:
+
+- Inicio de sesión con un administrador real.
+- Venta de dos bowls de pollo y un wrap de pollo, por Q100.00.
+- Registro de detalles de venta y descuento de ingredientes mediante FEFO.
+- Confirmación de transacciones y pruebas de reversión mediante `ROLLBACK`.
+- Auditoría automática de la venta y las actualizaciones de lotes.
+- Entrada de 1,000 gramos de pollo, registrada en el lote 21.
+- Auditoría de la entrada de inventario.
+- Top 10 con ventas registradas.
+- Reporte mensual de noviembre de 2026.
+- Consulta de existencias, lotes y alertas desde consola.
+- Rechazo de fechas inválidas y comprobaciones de permisos.
+
+Los identificadores y cantidades anteriores corresponden únicamente a la base local utilizada durante las pruebas.
+
+### Consideraciones técnicas
+
+El umbral del 15 % se calcula respecto a las cantidades iniciales definidas en `datos_iniciales.sql`. Esta interpretación es provisional y debe confirmarse con el equipo o el catedrático.
+
+El reporte mensual filtra lotes por fecha de caducidad, pero utiliza existencias actuales para las alertas de inventario. No reconstruye existencias históricas al cierre de meses anteriores.
+
+La integración final con la autenticación, las visitas y el menú principal deberá comprobarse después de unir las ramas.
+
+Para detalles de implementación, consultar `docs/modulo_nathalie.md`.
