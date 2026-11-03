@@ -109,7 +109,45 @@ def generar_reporte_sucursales(
 
     v_conexion = obtener_conexion()
     try:
-        with v_conexion.cursor() as v_cur:
+        with v_conexion.cursor() as v_cur:  
+            if (
+                p_fecha_inicio is None
+                and p_fecha_fin is None
+                and not p_incluir_canceladas
+            ):
+                v_cur.execute(
+                    """
+                    SELECT
+                        r.id_sucursal,
+                        r.sucursal,
+                        s.direccion,
+                        r.cantidad_reservas,
+                        r.cantidad_ventas,
+                        r.importe_vendido
+                    FROM vw_resumen_historico_sucursales r
+                    JOIN sucursal s
+                        ON s.id_sucursal = r.id_sucursal
+                    WHERE (
+                        %s::integer IS NULL
+                        OR r.id_sucursal = %s::integer
+                    )
+                    ORDER BY
+                        r.importe_vendido DESC,
+                        r.cantidad_ventas DESC,
+                        r.cantidad_reservas DESC,
+                        r.id_sucursal;
+                    """,
+                    (p_id_sucursal, p_id_sucursal)
+                )
+
+                v_columnas = [
+                    v_columna[0] for v_columna in v_cur.description
+                ]
+
+                return [
+                    dict(zip(v_columnas, v_fila))
+                    for v_fila in v_cur.fetchall()
+                ]
             v_cur.execute(
                 """
                 WITH reservas_agrupadas AS (
