@@ -1,77 +1,68 @@
 # Proyecto-2-BD-1
 
-Sistema de restaurante con PostgreSQL y Python.
+Sistema de gestión de restaurante desarrollado con PostgreSQL y Python.
 
-## Estado actual
-
-Se encuentran implementados:
-
-- Creación de la base de datos, restricciones, índices y bitácora.
-- Datos iniciales de Oakland Mall y Ciudad Cayalá.
-- Conexión compartida entre Python y PostgreSQL.
-- Manejo compartido de sesiones y transacciones.
-- Registro, búsqueda y consulta de clientes.
-- Registro y consulta de platos favoritos.
-- Historial de visitas, reservas y preferencias.
-- Registro de visitas con y sin reserva.
-- Consulta de mesas disponibles para una llegada.
-- Registro de salidas y liberación de mesas después de la limpieza.
-- Top 10 de clientes frecuentes por visitas.
-- Top 5 de clientes con más reservas y sus favoritos.
-- Menú de consola para las funcionalidades anteriores.
-
-El acceso actual al menú utiliza una sesión de prueba. Todavía falta integrar la autenticación real, los módulos restantes de reservas, inventario y ventas, y las demás opciones y reportes del sistema.
-
-## Organización del repositorio
-
-- `sql_datos/`: scripts para crear y cargar la base de datos.
-- `funcionalidades_py/`: conexión, transacciones y lógica del sistema.
-- `funcionalidades_py/consola/`: entrada de datos y presentación de resultados.
-- `docs/`: documentación del proyecto.
-- `requirements.txt`: dependencias de Python.
-- `config.example.ini`: ejemplo de configuración.
-- `README.md`: instrucciones de instalación y ejecución.
-
-`config.ini` y `.venv/` son archivos y carpetas locales excluidos de Git.
+Permite gestionar usuarios, clientes, reservas, visitas, preferencias, inventario, ventas y reportes administrativos para las sucursales Oakland Mall y Ciudad Cayalá.
 
 ## 1. Requisitos
 
 - PostgreSQL instalado y su servicio en ejecución.
 - pgAdmin instalado.
-- Un usuario de PostgreSQL con permisos para crear la base y sus objetos.
+- Acceso a PostgreSQL mediante un usuario con permisos para crear bases de datos y sus objetos.
 - Python 3.10 o superior.
-- Una copia descargada o clonada del repositorio.
-- Para los comandos de terminal de esta guía: Windows con Git Bash.
+- Git instalado, si se clonará el repositorio.
+- Una terminal Git Bash en Windows para seguir los comandos de esta guía.
 
-Si el repositorio ya está clonado, se puede actualizar desde su carpeta raíz:
+La aplicación utiliza consola. No requiere instalar una interfaz gráfica adicional.
+
+## 2. Descargar y localizar el proyecto
+
+Para clonar el repositorio:
+
+```bash
+git clone https://github.com/Mireya1017/Proyecto-2-BD-1.git
+cd Proyecto-2-BD-1
+```
+
+Si el repositorio es privado, GitHub solicitará autenticación y la cuenta deberá tener acceso.
+
+Si ya se descargó o clonó, abrir su carpeta en VS Code. No es necesario clonarlo nuevamente.
+
+Para actualizar una copia existente, con los cambios locales previamente guardados:
 
 ```bash
 git switch main
 git pull --ff-only origin main
 ```
 
-Guardar los cambios locales antes de cambiar de rama. Si Git informa un error, resolverlo antes de continuar.
+Todos los comandos de Python de esta guía se ejecutan desde la raíz de `Proyecto-2-BD-1`, donde se encuentran `README.md` y `requirements.txt`.
 
-## 2. Crear la base de datos
+### Organización
 
-Si ya se tiene una base creada y cargada con estos scripts, omitir su creación y pasar a configurar Python.
+- `sql_datos/`: creación de la base, restricciones, índices, triggers, datos iniciales, vistas y consultas de apoyo.
+- `funcionalidades_py/`: conexión, autenticación, transacciones y lógica del sistema.
+- `funcionalidades_py/consola/`: menús, entrada de datos y presentación de resultados.
+- `docs/`: documentación del proyecto.
+- `requirements.txt`: dependencias de Python.
+- `config.example.ini`: plantilla de configuración.
+- `config.ini`: configuración local que cada persona debe preparar.
 
-Para replicar la instalación desde cero:
+La carpeta `.venv/`, los archivos `__pycache__/` y `config.ini` están excluidos de Git.
+
+## 3. Crear una base de datos vacía
+
+Para replicar la instalación, utilizar una base nueva y vacía.
 
 1. Abrir pgAdmin.
 2. Conectarse al servidor PostgreSQL.
 3. Hacer clic derecho sobre `Databases`.
 4. Seleccionar `Create → Database`.
-5. Escribir `restaurante_prueba`.
+5. Escribir `restaurante_revision`.
 6. Pulsar `Save`.
 
-Debe ser una base nueva y vacía. Si ese nombre ya existe, utilizar otro y conservar ese nombre para la configuración posterior.
+Si ese nombre ya existe, utilizar otro nombre para una base nueva. No eliminar una base existente para repetir la instalación.
 
-En las pruebas del equipo se utilizó `restaurante`. Cada instalación debe configurar el nombre de la base que realmente utilizará.
-
-### Comprobar la base seleccionada
-
-Hacer clic derecho sobre la base recién creada y abrir `Query Tool`.
+Hacer clic derecho sobre la base recién creada y seleccionar `Query Tool`.
 
 Ejecutar:
 
@@ -81,37 +72,35 @@ SELECT current_database();
 
 El resultado debe coincidir con el nombre elegido.
 
-Todos los scripts y consultas posteriores deben ejecutarse en esa misma base.
+Mantener todas las ejecuciones SQL siguientes en esa misma base.
 
-## 3. Ejecutar los scripts SQL
+Si ya se tiene una base correctamente instalada con los seis scripts del siguiente apartado, se puede omitir su creación y pasar a configurar Python.
 
-Comprobar que dentro de `sql_datos/` estén:
+## 4. Crear la estructura y cargar los datos
 
-- `estructura.sql`
-- `restricciones.sql`
-- `indices.sql`
-- `triggers.sql`
-- `datos_iniciales.sql`
+Los archivos necesarios están en `sql_datos/`.
 
-Desde el Query Tool, abrir y ejecutar los archivos completos en este orden:
+Ejecutarlos completos en este orden:
 
 1. `estructura.sql`
 2. `restricciones.sql`
 3. `indices.sql`
 4. `triggers.sql`
 5. `datos_iniciales.sql`
+6. `vistas_reportes.sql`
 
 Para cada archivo:
 
-1. Abrirlo en el Query Tool conectado a la base elegida.
-2. Seleccionar todo su contenido.
-3. Pulsar F5.
-4. Revisar la pestaña `Messages`.
-5. Continuar únicamente si terminó sin errores.
+1. Abrirlo con la opción de abrir archivo del Query Tool.
+2. Comprobar que el Query Tool siga conectado a la base elegida.
+3. Seleccionar todo el contenido del editor.
+4. Pulsar F5.
+5. Revisar la pestaña `Messages`.
+6. Continuar únicamente si terminó sin errores.
 
-Cada archivo incluye `BEGIN` y `COMMIT`.
+Los primeros cinco archivos incluyen `BEGIN` y `COMMIT`. El sexto crea la vista utilizada por el reporte acumulado de sucursales.
 
-Si aparece un error, detener la carga y ejecutar por separado:
+Si aparece un error, detener la instalación y ejecutar por separado:
 
 ```sql
 ROLLBACK;
@@ -119,13 +108,25 @@ ROLLBACK;
 
 Corregir la causa antes de repetir el archivo que falló.
 
-Los archivos anteriores que terminaron correctamente con `COMMIT` ya están guardados y no deben ejecutarse otra vez en esa base.
+Los archivos anteriores que finalizaron correctamente con `COMMIT` ya están guardados. No deben ejecutarse nuevamente en esa base.
 
-Para repetir la instalación completa, utilizar otra base vacía.
+Los scripts de creación y carga inicial se utilizan una sola vez sobre una base vacía. Para repetir la instalación completa, crear otra base vacía.
 
-### Comprobar la estructura y los datos iniciales
+### Archivos que no forman parte de esta carga
 
-Después de ejecutar los cinco archivos:
+No ejecutar como parte de la instalación:
+
+- `datos_prueba.sql`
+- `inventario_consultas.sql`
+- `reportes_nathalie.sql`
+
+Contienen datos de demostración o consultas de apoyo. Las consultas utilizadas por los menús ya están implementadas en Python.
+
+Tampoco es necesario ejecutar los archivos Python de pruebas para instalar o abrir el sistema.
+
+### Verificar la carga inicial
+
+Ejecutar:
 
 ```sql
 SELECT 'Tablas' AS elemento, COUNT(*) AS cantidad
@@ -152,7 +153,7 @@ UNION ALL
 SELECT 'Lotes', COUNT(*) FROM lote;
 ```
 
-Resultados esperados inmediatamente después de la carga inicial:
+Resultados esperados inmediatamente después de la carga:
 
 - Tablas: 16.
 - Sucursales: 2.
@@ -162,13 +163,30 @@ Resultados esperados inmediatamente después de la carga inicial:
 - Recetas: 21.
 - Lotes: 18.
 
-El orden de las filas puede variar. Las cantidades pueden cambiar después de utilizar el sistema.
+El orden de las filas puede variar.
 
-La carga inicial no crea usuarios, clientes, reservas, visitas ni ventas.
+Comprobar que todavía no existen usuarios:
 
-Los precios, existencias y caducidades son datos de ejemplo. Las fechas de los lotes dependen del día de ejecución de la carga.
+```sql
+SELECT COUNT(*) AS usuarios_iniciales
+FROM usuario;
+```
 
-### Comprobar la bitácora
+El resultado debe ser `0`, antes de crear el primer administrador.
+
+Los datos iniciales no incluyen clientes, reservas, visitas ni ventas.
+
+### Verificar la vista
+
+```sql
+SELECT *
+FROM vw_resumen_historico_sucursales
+ORDER BY importe_vendido DESC, id_sucursal;
+```
+
+En una instalación nueva deben aparecer las dos sucursales, con reservas, ventas e importes en cero.
+
+### Verificar la bitácora
 
 ```sql
 SELECT
@@ -183,17 +201,15 @@ ORDER BY id_bitacora DESC
 LIMIT 10;
 ```
 
-Deben aparecer operaciones `INSERT` correspondientes a la carga inicial.
+Deben aparecer inserciones de la carga inicial.
 
-El usuario puede aparecer como `NULL` porque estos scripts se ejecutan sin una sesión de la aplicación.
+`id_usuario` puede ser `NULL` porque la carga se ejecuta directamente, sin una sesión de la aplicación.
 
-La bitácora guarda la identificación del registro afectado; no almacena una copia completa de todos sus campos.
+Los precios, cantidades y fechas son datos de ejemplo. Las fechas de recepción y caducidad de los lotes iniciales se calculan a partir del día de ejecución de la carga.
 
-## 4. Preparar Python
+## 5. Preparar Python
 
-Abrir una terminal Git Bash en la raíz de `Proyecto-2-BD-1`, donde están `README.md` y `requirements.txt`.
-
-La raíz es la carpeta del repositorio, independientemente de la rama seleccionada.
+Abrir una terminal Git Bash desde la raíz del repositorio.
 
 Comprobar Python:
 
@@ -207,7 +223,7 @@ Crear el entorno virtual si todavía no existe:
 python -m venv .venv
 ```
 
-Activarlo en Git Bash:
+Activarlo:
 
 ```bash
 source .venv/Scripts/activate
@@ -219,21 +235,21 @@ Activar el entorno cada vez que se abra una terminal nueva.
 
 ### Alternativa en PowerShell
 
-Si se utiliza una terminal PowerShell, el comando de activación es:
+Si se utiliza una terminal PowerShell:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-Si PowerShell bloquea la ejecución de scripts, ejecutar en esa misma terminal:
+Si PowerShell bloquea la ejecución de scripts:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
-Después repetir el comando de activación.
+Después repetir la activación.
 
-Este ajuste se aplica únicamente a esa sesión de PowerShell. Los comandos anteriores de PowerShell no se ejecutan en Git Bash.
+Este ajuste se aplica únicamente a esa sesión de PowerShell. Los comandos de PowerShell no se ejecutan en Git Bash.
 
 ### Instalar dependencias
 
@@ -251,7 +267,7 @@ python -c "import psycopg; print(psycopg.__version__)"
 
 Con las dependencias actuales debe mostrar `3.3.6`.
 
-## 5. Configurar la conexión
+## 6. Configurar la conexión
 
 En la raíz del repositorio, copiar `config.example.ini` y nombrar la copia `config.ini`.
 
@@ -261,40 +277,36 @@ Desde Git Bash, si todavía no existe:
 cp config.example.ini config.ini
 ```
 
-Si ya existe, editarlo sin reemplazarlo.
+Si ya existe `config.ini`, editarlo sin reemplazarlo.
 
-Completar sus valores:
+Completar los datos:
 
 ```ini
 [postgresql]
 host = localhost
 port = 5432
-dbname = restaurante_prueba
+dbname = restaurante_revision
 user = postgres
 password = CAMBIAR_AQUI
 ```
 
-- `host`: dirección del servidor PostgreSQL.
-- `port`: puerto de ese servidor.
+Reemplazar:
+
+- `host`: dirección del servidor PostgreSQL. Utilizar `localhost` cuando se ejecute en la misma computadora.
+- `port`: puerto configurado en PostgreSQL.
 - `dbname`: nombre exacto de la base creada y cargada.
-- `user`: usuario de PostgreSQL con acceso a la base.
-- `password`: contraseña de ese usuario.
+- `user`: usuario de PostgreSQL con permisos sobre esa base.
+- `password`: contraseña de ese usuario de PostgreSQL.
 
-Si se utilizará la base `restaurante`, escribir:
+Si se creó una base con otro nombre, modificar `dbname`.
 
-```ini
-dbname = restaurante
-```
+El usuario de PostgreSQL es distinto del usuario que inicia sesión en la aplicación.
 
-Guardar el archivo.
+Guardar el archivo antes de ejecutar Python.
 
-El usuario de PostgreSQL es distinto de los usuarios de la aplicación almacenados en la tabla `usuario`.
+`config.ini` contiene información personal y no debe publicarse. `config.example.ini` debe conservar únicamente valores de ejemplo.
 
-`config.ini` es personal y no debe subirse a Git. `config.example.ini` debe contener únicamente valores de ejemplo.
-
-### Verificar la conexión
-
-Desde la raíz del repositorio:
+### Comprobar la conexión
 
 ```bash
 python -m funcionalidades_py.prueba_conexion
@@ -306,136 +318,155 @@ Debe mostrar:
 - Nombre de la base configurada.
 - Usuario de PostgreSQL.
 
-Al consultar datos desde pgAdmin, abrir exactamente esa misma base. También deben coincidir el servidor y el puerto.
+Al revisar datos en pgAdmin, utilizar el mismo servidor, puerto y base que aparecen en la configuración de Python.
 
-Los datos de una base no se comparten automáticamente con otra base ni con las computadoras de los demás integrantes.
+Cambiar de rama en Git no cambia los datos de PostgreSQL. Cada base tiene sus propios usuarios y registros.
 
-## 6. Comprobaciones de Python
+## 7. Abrir el sistema
 
-### Sintaxis e imports
-
-```bash
-python -m compileall funcionalidades_py
-```
-
-No deben aparecer errores de sintaxis o sangría.
-
-Comprobar los imports del menú:
+Con el entorno virtual activo, ejecutar desde la raíz:
 
 ```bash
-python -c "from funcionalidades_py.menu_principal import menu_principal; print('Menú e imports cargados correctamente')"
+python -m funcionalidades_py.inicio
 ```
 
-Estas comprobaciones no validan por sí solas las consultas ni el funcionamiento completo con PostgreSQL.
-
-### Sesión de ejemplo
-
-```bash
-python -m funcionalidades_py.prueba_sesion
-```
-
-Debe mostrar el usuario de ejemplo `1`, rol `gerente` y sucursal `2`.
-
-Esta prueba construye un diccionario en memoria; no crea un usuario ni comprueba sus credenciales.
-
-### Contexto de bitácora
-
-```bash
-python -m funcionalidades_py.prueba_transacciones
-```
-
-Debe mostrar el identificador `1` dentro de la transacción y `None` después del rollback.
-
-### Manejo de errores
-
-```bash
-python -m funcionalidades_py.prueba_operacion
-```
-
-Debe encontrar Oakland Mall, mostrar un error intencional de división por cero y realizar otra consulta exitosa después del error.
-
-La división por cero forma parte de la prueba.
-
-Los cuatro módulos de prueba de conexión, sesión, contexto y operación no modifican las tablas. Sus identificadores de ejemplo no deben utilizarse como sesiones autenticadas.
-
-## 7. Preparar el usuario para probar el menú
-
-La carga SQL inicial no crea usuarios.
-
-Mientras se integra la autenticación real, ejecutar:
-
-```bash
-python -m funcionalidades_py.preparar_usuario_prueba
-```
-
-Este script:
-
-- Busca la sucursal Oakland Mall.
-- Crea el usuario `prueba_revision_yu` con rol `administrador`.
-- Guarda un hash generado a partir de una contraseña aleatoria.
-- Muestra el identificador real del usuario y su sucursal.
-- Si el nombre ya existe, conserva ese usuario y muestra sus datos.
-
-Este comando sí guarda información en PostgreSQL. La creación inicial puede quedar auditada con usuario `NULL`, porque todavía no hay una sesión de aplicación establecida.
-
-No se debe asumir que el identificador generado será `1`.
-
-Este usuario se utiliza mediante el acceso de prueba descrito a continuación. No se proporciona una contraseña para iniciar sesión con él.
-
-El formato de hash utilizado por este script deberá coordinarse con el mecanismo definitivo de autenticación antes de reutilizarlo para cuentas reales.
-
-## 8. Abrir el menú de prueba
-
-Ejecutar:
-
-```bash
-python -m funcionalidades_py.prueba_menu
-```
-
-El script busca `prueba_revision_yu`, toma su ID, rol y sucursal y construye la sesión.
-
-Debe mostrar:
+La pantalla de acceso muestra:
 
 ```text
-MODO DE PRUEBA: sesión sin autenticación.
+1. Iniciar sesión
+2. Crear primer administrador
+0. Salir
 ```
 
-Este acceso permite probar las funcionalidades implementadas. No valida credenciales ni sustituye el inicio de sesión definitivo.
+### Crear el primer administrador
 
-Las operaciones que se completen correctamente desde el menú sí se guardan en la base configurada.
+En una instalación nueva:
 
-### Opciones disponibles
+1. Seleccionar `2`.
+2. Consultar la lista de sucursales mostrada.
+3. Ingresar un nombre de usuario.
+4. Ingresar una contraseña de al menos seis caracteres.
+5. Repetir la contraseña.
+6. Ingresar el ID de su sucursal habitual.
+7. Esperar la confirmación del registro.
 
-- `1`: gestión de clientes.
-- `2`: preferencias de clientes.
-- `3`: historial de clientes.
-- `4`: reportes de clientes, visible para el administrador.
-- `5`: gestión de visitas.
-- `0`: salir del menú principal.
+La contraseña no se muestra mientras se escribe. Es normal: se utiliza `getpass`.
 
-La opción `0` de cada submenú regresa al menú principal.
+La creación inicial solo se permite cuando la tabla `usuario` está vacía.
 
-Después de modificar código, guardar los archivos y salir del programa antes de ejecutarlo de nuevo.
+No se proporcionan credenciales predeterminadas. La persona que instala el sistema elige las del primer administrador.
 
-## 9. Uso de las funcionalidades
+### Iniciar sesión
 
-### Clientes
+1. Seleccionar `1`.
+2. Ingresar el nombre de usuario registrado.
+3. Ingresar su contraseña.
+4. Pulsar Enter.
 
-Permite registrar nombre y teléfono opcional, buscar por nombre y consultar por ID.
+El acceso correcto muestra la bienvenida y el menú principal con el ID, rol y sucursal del usuario.
+
+Las contraseñas se almacenan mediante PBKDF2-HMAC-SHA256 con sal aleatoria; no se guardan como texto plano.
+
+Si ya existen usuarios, utilizar una cuenta registrada. No intentar crear nuevamente al primer administrador.
+
+### Cerrar sesión y salir
+
+- La opción `0` de un submenú vuelve al menú principal.
+- La opción `0` del menú principal cierra la sesión y vuelve a la pantalla de acceso.
+- La opción `0` de la pantalla de acceso termina el programa.
+
+Si se modifica código, guardar los archivos y cerrar el programa antes de ejecutarlo nuevamente.
+
+## 8. Opciones y permisos
+
+El administrador puede ver las siguientes opciones:
+
+```text
+1. Gestión de clientes
+2. Preferencias de clientes
+3. Historial de clientes
+4. Reportes de clientes
+5. Gestión de visitas
+6. Gestión de usuarios
+7. Gestión de reservas
+8. Administración
+9. Ventas
+10. Inventario
+11. Reportes de inventario y ventas
+0. Cerrar sesión
+```
+
+Permisos:
+
+- Administrador: gestión de usuarios, todas las sucursales, operaciones del restaurante, bitácora y reportes.
+- Gerente: operaciones de reservas, visitas, ventas e inventario de su sucursal, además de clientes y preferencias.
+- Mesero: operaciones de reservas, visitas y ventas de su sucursal, además de clientes y preferencias.
+
+Los clientes y sus preferencias son compartidos entre sucursales.
+
+Las visitas y reservas del historial se filtran por sucursal para gerente y mesero.
+
+Algunas opciones no aparecen según el rol. Los números conservan su identificación, por lo que pueden existir saltos.
+
+## 9. Gestión de usuarios
+
+Acceso: administrador, opción `6`.
+
+### Registrar usuario
+
+1. Seleccionar `1. Registrar usuario`.
+2. Consultar las sucursales mostradas.
+3. Ingresar nombre de usuario.
+4. Ingresar y confirmar contraseña.
+5. Indicar uno de estos roles:
+
+```text
+administrador
+gerente
+mesero
+```
+
+6. Ingresar el ID de sucursal habitual.
+
+El nombre de usuario debe ser único.
+
+### Listar usuarios
+
+Seleccionar `2. Listar usuarios`.
+
+Se muestran ID, nombre de usuario, rol y sucursal. No se muestran contraseñas ni hashes.
+
+## 10. Clientes y preferencias
+
+### Registrar cliente
+
+En opción `1. Gestión de clientes`:
+
+1. Seleccionar registrar cliente.
+2. Ingresar nombre.
+3. Ingresar teléfono o dejarlo vacío.
+4. Conservar el ID generado para utilizarlo en reservas, visitas y preferencias.
 
 El nombre es obligatorio y admite hasta 120 caracteres. El teléfono admite hasta 20 caracteres.
 
 El teléfono vacío se guarda como `NULL`.
 
-La búsqueda por nombre no distingue mayúsculas de minúsculas y permite coincidencias parciales. Una búsqueda vacía devuelve todos los clientes.
+### Buscar y consultar clientes
 
-Los clientes son compartidos entre sucursales.
+- Buscar por nombre permite coincidencias parciales sin distinguir mayúsculas y minúsculas.
+- Una búsqueda de nombre vacía devuelve todos los clientes.
+- Consultar por ID muestra el cliente específico.
 
-### Preferencias
+### Platos favoritos
 
-Permite agregar y consultar los productos favoritos de un cliente utilizando sus identificadores.
+En opción `2. Preferencias de clientes`:
 
-Para consultar los productos disponibles desde pgAdmin:
+- Agregar favorito solicita ID de cliente e ID de producto.
+- Consultar favoritos solicita ID de cliente.
+
+El cliente y el producto deben existir. Una misma preferencia no puede registrarse dos veces.
+
+Para conocer los IDs de productos desde la aplicación, entrar a `9. Ventas` y seleccionar registrar venta: se muestra el menú con IDs antes de solicitar los datos. También pueden consultarse desde pgAdmin:
 
 ```sql
 SELECT id_plato, nombre, precio
@@ -443,301 +474,475 @@ FROM plato
 ORDER BY id_plato;
 ```
 
-Una misma combinación de cliente y producto no puede repetirse.
+No asumir que un nombre siempre tiene el mismo ID en todas las bases.
 
-El cliente y el producto deben existir. Las preferencias son compartidas entre sucursales.
+## 11. Gestión de reservas
 
-### Historial
+Acceso: opción `7`.
 
-Muestra visitas, reservas y platos favoritos.
+### Registrar reserva
 
-- El administrador consulta visitas y reservas de todas las sucursales.
-- Gerente y mesero consultan únicamente las de su sucursal.
-- Los favoritos del cliente se mantienen compartidos.
-
-Si el cliente no existe, se informa el error.
-
-### Registrar una llegada
-
-En gestión de visitas, seleccionar registrar llegada.
+Seleccionar `1. Registrar reserva`.
 
 Ingresar:
 
 1. ID del cliente existente.
-2. ID de sucursal, si la sesión es de administrador. Para otros roles se utiliza su sucursal.
+2. Sucursal, si se utiliza una sesión de administrador.
+3. Fecha y hora inicial.
+4. Fecha y hora final estimada.
+5. Cantidad de personas.
+6. Zona: `interior` o `exterior`.
+7. IDs de mesas disponibles, separados por coma.
+
+Formato de fecha y hora:
+
+```text
+AAAA-MM-DD HH:MM
+```
+
+La hora final debe ser posterior a la inicial.
+
+Gerente y mesero utilizan automáticamente su sucursal.
+
+La consola muestra las mesas disponibles para el horario y zona indicados.
+
+Las mesas seleccionadas deben existir, pertenecer a la sucursal, estar en la misma zona y tener capacidad conjunta suficiente.
+
+El sistema rechaza superposiciones con otras reservas confirmadas o atendidas. Una reserva puede comenzar exactamente cuando termina otra.
+
+La reserva y sus mesas se guardan en una misma transacción.
+
+### Consultar reservas
+
+Seleccionar `2. Consultar reservas`.
+
+El administrador puede consultar todas. Gerente y mesero consultan únicamente las de su sucursal.
+
+Se muestran cliente, sucursal, fechas, personas, estado y mesas.
+
+### Modificar reserva
+
+Seleccionar `3. Modificar reserva`.
+
+Indicar el ID de reserva.
+
+Dejar vacío un dato para conservarlo:
+
+- Inicio.
+- Fin estimado.
+- Cantidad de personas.
+- IDs de mesas.
+
+Solo se modifican reservas confirmadas. El cambio vuelve a validar horarios, capacidad y asignación de mesas.
+
+### Cancelar reserva
+
+Seleccionar `4. Cancelar reserva`.
+
+Indicar el ID.
+
+La reserva cambia a `cancelada`, pero conserva sus asignaciones históricas. Deja de bloquear el horario reservado.
+
+### Registrar inasistencia
+
+Seleccionar `5. Marcar inasistencia`.
+
+Utilizarla cuando el personal determine que el cliente no asistió.
+
+Las reservas atendidas no pueden anularse mediante estas operaciones.
+
+## 12. Visitas, salidas y liberación de mesas
+
+Acceso: opción `5`.
+
+### Registrar llegada
+
+Seleccionar `1. Registrar llegada`.
+
+Ingresar:
+
+1. ID de cliente.
+2. Sucursal, si el usuario es administrador.
 3. Cantidad de personas.
 4. ID de reserva, o dejar vacío si no tiene.
-5. IDs de mesas separados por coma.
+5. IDs de mesas, separados por coma.
 6. Observaciones opcionales.
 
-Antes de solicitar las mesas, el programa muestra su ID, número, capacidad y zona.
+Antes de pedir las mesas, el programa muestra ID, número, capacidad y zona de las disponibles en ese momento.
 
 Se ingresan los valores de `id_mesa`, no el número de mesa dentro de la sucursal.
 
-Las mesas deben:
+El personal selecciona las mesas. Si se juntan varias, determina cuáles pueden unirse físicamente.
 
-- Pertenecer a la sucursal.
-- Estar en la misma zona.
-- Tener capacidad conjunta suficiente.
-- Estar liberadas.
-- No estar asignadas a otra reserva vigente en ese momento.
-
-El personal determina cuáles pueden juntarse físicamente.
+El sistema comprueba sucursal, zona, capacidad, ocupación, limpieza pendiente y reservas vigentes de otros grupos.
 
 Si se indica una reserva, debe estar confirmada y pertenecer al cliente y a la sucursal seleccionados.
 
-La visita, sus mesas y el cambio de la reserva a `atendida` se guardan dentro de una misma transacción.
+Se guardan la visita, las mesas y el cambio de la reserva a `atendida` en una misma transacción.
 
-La consulta de disponibilidad actual no estima si la visita terminará antes de una reserva futura.
+Conservar el ID de visita para registrar ventas y la salida.
 
-### Salida y liberación
+### Registrar salida
 
-Primero registrar la salida utilizando el ID de visita.
+Seleccionar `2. Registrar salida` e ingresar el ID de visita.
 
-La salida no libera automáticamente las mesas.
+La salida queda registrada, pero las mesas siguen pendientes de liberación.
 
-Después de limpiarlas, seleccionar liberar mesa e ingresar el ID de visita y el ID de mesa.
+### Liberar mesa
 
-El sistema impide liberar una mesa antes de registrar la salida.
+Después de la limpieza:
 
-### Reportes de clientes
+1. Seleccionar `3. Liberar mesa después de limpieza`.
+2. Ingresar ID de visita.
+3. Ingresar ID de mesa.
 
-Disponibles únicamente para administrador:
+No se permite liberar una mesa antes de registrar la salida.
 
-- Top 10 de clientes frecuentes, contado por visitas.
-- Top 5 de clientes con más reservas, incluyendo sus favoritos.
+Si la visita utilizó varias mesas, liberar cada una.
 
-Ingresar las fechas en formato:
+### Historial
+
+La opción principal `3` muestra visitas, reservas, favoritos y observaciones del cliente.
+
+Administrador consulta todas las sucursales. Gerente y mesero ven únicamente las visitas y reservas de su sucursal.
+
+## 13. Inventario
+
+Acceso: administrador y gerente, opción `10`.
+
+El administrador elige sucursal. El gerente utiliza su sucursal asignada.
+
+### Consultar existencias
+
+Seleccionar `1`.
+
+Se muestran ID del insumo, nombre, unidad, existencia utilizable y mínimo.
+
+Los lotes vencidos no se consideran utilizables.
+
+### Consultar lotes
+
+Seleccionar `2` e indicar el ID del insumo.
+
+Se muestran lote, caducidad, cantidad, unidad y estado.
+
+Un lote vencido conserva su cantidad histórica, aunque no esté disponible para ventas.
+
+### Consultar alertas
+
+Seleccionar `3`.
+
+Se muestran:
+
+- Existencias por debajo del mínimo.
+- Lotes con cantidad disponible que caducan entre hoy y los próximos siete días.
+- Porcentaje disponible respecto al stock inicial de referencia.
+
+Para este proyecto, el cálculo del porcentaje es:
+
+```text
+Porcentaje disponible =
+(existencia utilizable / stock inicial de referencia) × 100
+```
+
+Se genera alerta al 15 % o menos.
+
+Esta referencia es una interpretación documentada del equipo, porque la guía no define expresamente la base del porcentaje.
+
+Los insumos sin referencia siguen mostrando existencias y alertas por mínimo, pero su porcentaje se indica como `Sin referencia`.
+
+La ventana de próxima caducidad utilizada es de siete días.
+
+### Registrar entrada
+
+Seleccionar `4`.
+
+Ingresar:
+
+1. ID del insumo existente.
+2. Fecha de recepción.
+3. Fecha de caducidad.
+4. Cantidad recibida.
+5. Confirmación `SI`.
+
+Formato de fechas:
 
 ```text
 AAAA-MM-DD
 ```
 
-La fecha final es inclusiva. Para consultar un solo día, ingresar la misma fecha como inicial y final.
+La cantidad debe ser positiva y admitir la precisión de `NUMERIC(12,3)`. La caducidad no puede ser anterior a la recepción.
 
-El Top 5 excluye reservas canceladas; incluye los demás estados.
+Cada entrada crea un lote nuevo.
 
-Los reportes consideran todas las sucursales. Los empates se ordenan por ID del cliente.
+No cambiar la caducidad de un lote vencido para volverlo utilizable. Registrar una entrada nueva con sus propias fechas.
 
-En una instalación nueva pueden no existir visitas o reservas. En ese caso se muestra un mensaje sin resultados.
+No volver a ejecutar `datos_iniciales.sql` para reponer inventario.
 
-## 10. Transacciones y bitácora
+## 14. Ventas
 
-Los módulos utilizan:
+Acceso: opción `9`.
+
+### Consultar menú
+
+Seleccionar `1`.
+
+Se muestran productos y precios actuales.
+
+### Registrar venta
+
+Seleccionar `2`.
+
+Se muestra el menú con los IDs de productos.
+
+Ingresar:
+
+1. ID de una visita existente y abierta.
+2. Cantidad de productos diferentes.
+3. ID y cantidad de cada producto.
+
+Cada producto se indica una sola vez con su cantidad total.
+
+El sistema:
+
+- Verifica acceso a la sucursal de la visita.
+- Rechaza visitas finalizadas.
+- Obtiene los precios de PostgreSQL.
+- Suma los ingredientes necesarios de toda la venta.
+- Comprueba inventario utilizable.
+- Consume primero los lotes con menor fecha de caducidad.
+- Desempata lotes con igual caducidad por menor ID.
+- Guarda venta, detalles y descuento de ingredientes en una sola transacción.
+
+No utiliza lotes vencidos.
+
+Al finalizar muestra el ID de venta, ID de visita y total.
+
+El precio aplicado se conserva en el detalle aunque posteriormente cambie el precio del menú.
+
+La venta no registra automáticamente la salida del cliente. La salida y liberación se realizan desde gestión de visitas.
+
+## 15. Reportes administrativos
+
+Todos los reportes están restringidos al administrador.
+
+### Reportes de clientes: opción `4`
+
+Incluye:
+
+- Top 10 de clientes frecuentes por cantidad de visitas.
+- Top 5 de clientes con más reservas y sus favoritos.
+
+Solicitan fecha inicial y final en formato `AAAA-MM-DD`.
+
+La fecha final incluye el día completo. Para consultar un solo día, ingresar la misma fecha en ambos campos.
+
+El Top 5 excluye reservas canceladas e incluye los demás estados.
+
+Los reportes consideran todas las sucursales y resuelven empates por ID de cliente.
+
+### Administración: opción `8`
+
+Incluye:
+
+1. Consulta de bitácora.
+2. Reporte de sucursales.
+
+La bitácora permite filtrar por fechas, usuario, tabla y operación. Los filtros vacíos no restringen los resultados. Se muestran hasta 100 registros.
+
+Las operaciones válidas son `INSERT`, `UPDATE` y `DELETE`.
+
+El reporte de sucursales permite filtrar por período y sucursal. Muestra reservas no canceladas, cantidad de ventas e importe vendido.
+
+Sin fechas utiliza `vw_resumen_historico_sucursales`. Con fechas utiliza una consulta con CTEs.
+
+Reservas y ventas se agrupan por separado para evitar multiplicar conteos e importes.
+
+Las sucursales sin movimientos aparecen con valores en cero.
+
+### Inventario y ventas: opción `11`
+
+Incluye:
+
+1. Top 10 de productos más vendidos.
+2. Reporte mensual de inventario.
+3. Insumos bajo mínimo.
+
+El Top 10 considera todas las fechas y sucursales. Ordena por unidades vendidas y calcula ingresos con los precios históricos del detalle.
+
+El reporte mensual solicita año, mes y sucursal. Muestra:
+
+- Lotes cuya caducidad pertenece al mes seleccionado.
+- Existencias actuales por debajo del mínimo.
+- Alertas actuales del 15 %.
+
+Las cantidades corresponden al momento de consulta. El reporte no reconstruye existencias al cierre de meses anteriores.
+
+En una instalación nueva, los reportes de clientes y ventas pueden no tener resultados hasta registrar operaciones.
+
+## 16. Recorrido recomendado para comprobar el sistema
+
+Después de instalar y crear al administrador:
+
+1. Iniciar sesión.
+2. Registrar un cliente y conservar su ID.
+3. Consultarlo por ID.
+4. Agregar un producto favorito y consultarlo.
+5. Registrar una reserva para un horario elegido, seleccionando mesas de la lista disponible.
+6. Consultar la reserva.
+7. Registrar una llegada sin reserva y conservar el ID de visita.
+8. Consultar inventario para confirmar que los ingredientes del producto que se venderá estén utilizables.
+9. Registrar una venta para esa visita.
+10. Consultar el Top 10 de productos y el reporte de sucursales.
+11. Consultar la bitácora filtrando tabla `venta` y operación `INSERT`.
+12. Registrar la salida de la visita.
+13. Liberar sus mesas después de la limpieza.
+14. Consultar el historial del cliente.
+
+Las pruebas con reserva asociada deben utilizar una reserva confirmada del cliente y sucursal de la llegada.
+
+Si falta inventario vigente, registrar entradas desde inventario antes de vender.
+
+Los identificadores se generan automáticamente. Utilizar los mostrados por el programa; no copiar IDs de pruebas de otra computadora o base.
+
+Los datos de prueba permanecen guardados cuando la operación termina correctamente.
+
+## 17. Transacciones, integridad y auditoría
+
+Las operaciones de escritura utilizan el manejador compartido:
 
 ```python
 ejecutar_transaccion(p_sesion, p_operacion, p_datos)
 ```
 
-La función recibida como operación debe aceptar:
+Cada operación recibe:
 
 ```python
 def nombre_operacion(p_conexion, p_sesion, p_datos):
 ```
 
-Se pasa su nombre sin paréntesis.
+La operación utiliza la conexión recibida. El manejador establece el usuario de bitácora, ejecuta la operación y confirma con `commit`.
 
-La operación debe:
+Si ocurre un error, ejecuta `rollback` y lo comunica. Finalmente cierra la conexión.
 
-- Utilizar la conexión recibida.
-- Comprobar permisos y sucursal.
-- Ejecutar SQL con parámetros.
-- Devolver el resultado necesario.
-- Propagar los errores al manejador compartido.
+Las operaciones no deben abrir otra conexión ni confirmar parcialmente sus cambios.
 
-No debe abrir otra conexión ni ejecutar `commit`, `rollback` o `close`.
+Las restricciones diferidas se comprueban al confirmar la transacción.
 
-El manejador compartido establece el usuario para la bitácora, ejecuta la operación y confirma los cambios con `commit`.
+La base utiliza llaves primarias, foráneas, restricciones, índices y triggers para proteger la integridad.
 
-Si falla, ejecuta `rollback` y comunica el error. Finalmente cierra la conexión.
+La bitácora registra automáticamente inserciones, actualizaciones y eliminaciones de las tablas auditadas. Guarda tabla, operación, identificación del registro, usuario y fecha.
 
-La confirmación también comprueba las restricciones diferidas.
+No guarda una copia completa de todos los campos anteriores y nuevos.
 
-Los pasos que forman una sola operación deben utilizar la misma conexión y transacción. Por ejemplo:
+La carga SQL y la creación inicial del administrador pueden registrar usuario `NULL`. Las operaciones posteriores utilizan el usuario de la sesión.
 
-- Reserva y asignación de mesas.
-- Visita, asignación de mesas y actualización de reserva.
-- Venta, detalles y descuento de ingredientes, cuando se integre ese módulo.
+No se desarrollan escenarios adicionales de reservas simultáneas de mesas. Se mantienen las transacciones y las validaciones normales de disponibilidad y consistencia.
 
-No se requiere desarrollar escenarios adicionales de reservas simultáneas de mesas. Se mantienen las validaciones normales de disponibilidad y las transacciones.
+## 18. Comprobaciones y solución de problemas
 
-### Verificar una operación auditada
+### Revisar sintaxis
 
-Después de registrar un cliente desde el menú:
-
-```sql
-SELECT
-    id_usuario,
-    tabla,
-    registro,
-    operacion,
-    fecha_hora
-FROM bitacora
-WHERE tabla = 'cliente'
-ORDER BY id_bitacora DESC
-LIMIT 10;
+```bash
+python -m compileall funcionalidades_py
 ```
 
-La inserción debe tener el ID del usuario de la sesión utilizada.
+### Revisar imports del arranque
 
-Las operaciones revertidas no deben dejar cambios ni entradas de bitácora confirmadas.
+```bash
+python -c "from funcionalidades_py.inicio import iniciar_programa; print('Inicio y menús cargados correctamente')"
+```
 
-## 11. Pruebas realizadas y pendientes
+Estas comprobaciones no ejecutan los flujos de negocio ni sustituyen las pruebas con PostgreSQL.
 
-Durante la revisión se comprobaron:
+### No se encuentra Psycopg
 
-- Sintaxis e imports.
-- Conexión con PostgreSQL.
-- Registro y consulta de clientes.
-- Auditoría de una inserción realizada desde Python.
-- Consulta de favoritos y rechazo de favoritos duplicados.
-- Historial y filtro por sucursal.
-- Consulta de mesas disponibles.
-- Llegadas con y sin reserva.
-- Cambio de reserva a `atendida`.
-- Rechazo de liberación antes de registrar la salida.
-- Registro de salida y liberación posterior.
-- Reportes de clientes con datos y sin resultados.
+Activar el entorno virtual y ejecutar:
 
-Estas comprobaciones se realizaron con una sesión de prueba. No equivalen a una validación completa del sistema integrado.
+```bash
+python -m pip install -r requirements.txt
+```
 
-Queda pendiente:
+### No se encuentra config.ini
 
-- Conectar la autenticación real.
-- Integrar los módulos restantes de reservas, inventario y ventas.
-- Coordinar la disponibilidad utilizada por reservas y llegadas.
-- Agregar las opciones y reportes restantes al menú.
-- Probar los flujos completos con usuarios autenticados y sus permisos.
-- Actualizar estas instrucciones al incorporar los módulos restantes.
+Crear el archivo en la raíz del repositorio, junto a `README.md`, siguiendo el apartado de configuración.
 
-Los registros creados durante las pruebas son locales. Subir código a Git no sube los datos de PostgreSQL.
+### Error de conexión
 
+Comprobar:
 
-## 12. Usuarios, autenticación y reservas
+- Servicio PostgreSQL en ejecución.
+- Servidor y puerto.
+- Nombre de base.
+- Usuario y contraseña de PostgreSQL.
+- Que los cambios de `config.ini` estén guardados.
 
-Se encuentran integrados:
+### PostgreSQL indica que una tabla no existe
 
-- Registro del primer administrador cuando la tabla `usuario` está vacía.
-- Registro de usuarios desde una sesión de administrador.
-- Protección de contraseñas mediante PBKDF2-HMAC-SHA256 con sal aleatoria.
-- Inicio y cierre de sesión.
-- Validación de permisos por rol y sucursal.
-- Consulta de disponibilidad de mesas por sucursal, horario y zona.
-- Registro, búsqueda y modificación de reservas.
-- Cancelación y registro de inasistencia, conservando las mesas históricas.
-- Consulta administrativa de bitácora.
-- Reporte de reservas y ventas por sucursal.
+Comprobar la base seleccionada y que los scripts se hayan ejecutado completos en el orden indicado.
 
-Los archivos principales son:
+### No existe vw_resumen_historico_sucursales
 
-- `funcionalidades_py/usuarios.py`
-- `funcionalidades_py/reservas.py`
-- `funcionalidades_py/administracion.py`
-- `funcionalidades_py/consola/consola_pablo.py`
-- `funcionalidades_py/inicio.py`
+Ejecutar `sql_datos/vistas_reportes.sql` en la misma base utilizada por Python.
 
-### Acceso mediante autenticación real
+### Usuario o contraseña incorrectos
 
-Con el entorno virtual activo y la conexión configurada, ejecutar desde la raíz:
+Utilizar una cuenta creada en la base configurada. Las cuentas de otra base no están disponibles automáticamente.
+
+Si la base está recién instalada y vacía de usuarios, crear primero al administrador.
+
+### Ya existe al menos un usuario
+
+La creación inicial del administrador está bloqueada porque ya existen cuentas. Iniciar sesión con una cuenta disponible.
+
+### Inventario insuficiente
+
+Consultar existencias y lotes de la sucursal de la visita. Los lotes vencidos no cuentan como disponibles.
+
+Registrar entradas nuevas cuando corresponda.
+
+### La mesa no está disponible
+
+Comprobar reservas del horario y visitas sin liberación. Registrar la salida no libera la mesa automáticamente.
+
+### No aparecen datos en pgAdmin
+
+Comprobar:
+
+```sql
+SELECT current_database();
+```
+
+La conexión de pgAdmin debe coincidir con el servidor, puerto y base utilizados por Python.
+
+### Error de sangría o sintaxis
+
+Revisar el archivo y línea que muestra Python. Guardar y volver a ejecutar.
+
+### Cambié código, pero sigue funcionando la versión anterior
+
+Cerrar el programa completamente y ejecutar nuevamente:
 
 ```bash
 python -m funcionalidades_py.inicio
 ```
 
-Para una instalación nueva:
+## 19. Archivos de pruebas y datos locales
 
-1. Seleccionar `2. Crear primer administrador`.
-2. Ingresar nombre de usuario, contraseña, confirmación y sucursal habitual.
-3. Seleccionar `1. Iniciar sesión`.
-4. Ingresar las credenciales recién creadas.
+El punto de entrada normal es:
 
-La creación del primer administrador solo funciona cuando no existen usuarios.
+```bash
+python -m funcionalidades_py.inicio
+```
 
-Si ya existen usuarios, iniciar sesión con una cuenta disponible. Un administrador autenticado puede crear las demás cuentas desde gestión de usuarios.
+Los archivos `prueba_*.py` y `preparar_*.py` son herramientas de desarrollo. Algunos crean datos, utilizan sesiones simuladas o están preparados para condiciones específicas.
 
-El programa definitivo utiliza este acceso. `prueba_menu.py` es una herramienta de pruebas que omite la autenticación.
+No ejecutarlos todos como parte de la instalación.
 
-### Opciones integradas del menú
+En particular, `prueba_menu.py` omite la autenticación y no es el acceso normal del sistema.
 
-- `1`: gestión de clientes.
-- `2`: preferencias.
-- `3`: historial de clientes.
-- `4`: reportes de clientes, solo administrador.
-- `5`: gestión de visitas.
-- `6`: gestión de usuarios, solo administrador.
-- `7`: gestión de reservas.
-- `8`: administración, solo administrador.
-- `0`: cerrar sesión.
+No se necesitan usuarios de prueba predefinidos para replicar la aplicación: el primer administrador se crea desde la pantalla de acceso.
 
-### Permisos
+Git almacena el código, no los registros de PostgreSQL. Subir o descargar cambios del repositorio no copia usuarios, ventas ni inventario entre computadoras.
 
-El administrador puede operar sobre todas las sucursales y gestionar usuarios.
-
-Gerente y mesero tienen restringidas las operaciones de reservas y visitas a su sucursal.
-
-La bitácora y los reportes administrativos están restringidos al administrador.
-
-### Reporte de sucursales
-
-Agrupa reservas y ventas por separado mediante CTEs antes de combinar sus resultados. Así evita multiplicar cantidades e importes.
-
-Por defecto excluye las reservas canceladas. Los importes utilizan el precio guardado en cada detalle de venta.
-
-Las fechas finales ingresadas en las consultas administrativas incluyen el día completo.
-
-## 13. Inventario y ventas
-
-Los módulos están desarrollados y se encuentran en revisión para integrarlos al menú principal.
-
-### Funcionalidades
-
-- Existencias utilizables por sucursal, excluyendo lotes vencidos.
-- Consulta de lotes y fechas de caducidad.
-- Entradas directas de inventario.
-- Alertas por existencias inferiores al mínimo.
-- Alertas de próxima caducidad, con ventana provisional de siete días.
-- Porcentaje disponible respecto al stock inicial de referencia.
-- Ventas asociadas a visitas abiertas.
-- Consumo conjunto de ingredientes de todos los productos de la venta.
-- Consumo FEFO: primero los lotes que caducan antes, con desempate por ID.
-- Registro de precios históricos en los detalles de venta.
-- Top 10 de productos por unidades vendidas.
-- Reporte de caducidades por mes y alertas de existencias actuales.
-
-Cada entrada o venta se ejecuta mediante el manejador compartido de transacciones.
-
-Una venta guarda cabecera, detalles y descuento de ingredientes en la misma transacción. Si falla, sus cambios deben revertirse.
-
-### Integración pendiente
-
-La consola `funcionalidades_py/consola/consola_nathalie.py` proporciona:
-
-- `menu_inventario(p_sesion)`
-- `menu_ventas(p_sesion)`
-- `menu_reportes_nathalie(p_sesion)`
-
-Inventario permite administrador y gerente, respetando la sucursal del gerente.
-
-Ventas permite administrador, gerente y mesero, respetando la sucursal de la visita.
-
-Los reportes permiten únicamente administrador.
-
-Las sesiones deben proceder del inicio de sesión real.
-
-### Interpretaciones y limitaciones
-
-El 15 % utiliza como referencia las cantidades de la carga inicial. Es una interpretación documentada del equipo: la guía no define expresamente la base del porcentaje.
-
-Los insumos sin referencia conservan su consulta de existencias y alerta por mínimo, pero no tienen un porcentaje calculado.
-
-El reporte mensual selecciona lotes por su fecha de caducidad. Las cantidades y alertas de existencias corresponden al momento de consulta, no al cierre histórico del mes.
-
-### Validación
-
-La entrega incluye pruebas individuales de entradas, ventas, FEFO, auditoría, reportes y reversión de transacciones.
-
-Después de los ajustes y la integración se comprobarán los flujos en la base local utilizada por el equipo.
-
-Los IDs, cantidades y resultados de las pruebas individuales no deben asumirse como datos presentes en otras instalaciones.
-
-Consultar `docs/modulo_nathalie.md` para los contratos de las funciones.
+Para conectar varias instalaciones a una misma base, sus archivos `config.ini` deben apuntar al mismo servidor y base accesibles.
