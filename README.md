@@ -613,71 +613,131 @@ Queda pendiente:
 Los registros creados durante las pruebas son locales. Subir código a Git no sube los datos de PostgreSQL.
 
 
-## Módulo de inventario y ventas — Nathalie
+## 12. Usuarios, autenticación y reservas
 
-**Estado:** implementado y probado individualmente en la rama `nathalie-inventario-ventas`. Pendiente de integración con el menú principal y los demás módulos del sistema.
+Se encuentran integrados:
 
-### Funcionalidades implementadas
+- Registro del primer administrador cuando la tabla `usuario` está vacía.
+- Registro de usuarios desde una sesión de administrador.
+- Protección de contraseñas mediante PBKDF2-HMAC-SHA256 con sal aleatoria.
+- Inicio y cierre de sesión.
+- Validación de permisos por rol y sucursal.
+- Consulta de disponibilidad de mesas por sucursal, horario y zona.
+- Registro, búsqueda y modificación de reservas.
+- Cancelación y registro de inasistencia, conservando las mesas históricas.
+- Consulta administrativa de bitácora.
+- Reporte de reservas y ventas por sucursal.
 
-**Inventario**
-- Consulta de existencias por sucursal, excluyendo lotes vencidos.
-- Consulta de lotes, cantidades y fechas de caducidad.
-- Registro transaccional de entradas de inventario.
-- Alertas por existencias inferiores al mínimo establecido.
-- Alertas de próxima caducidad, con una ventana provisional de siete días.
-- Alertas cuando las existencias alcanzan el 15 % o menos del stock inicial de referencia.
+Los archivos principales son:
 
-**Ventas**
-- Registro de ventas asociadas a visitas existentes y abiertas.
-- Validación de productos, cantidades y disponibilidad de ingredientes.
-- Cálculo de subtotales y total de venta.
-- Descuento de ingredientes utilizando FEFO (*First Expired, First Out*).
-- Registro de venta, detalles y descuentos dentro de una misma transacción.
+- `funcionalidades_py/usuarios.py`
+- `funcionalidades_py/reservas.py`
+- `funcionalidades_py/administracion.py`
+- `funcionalidades_py/consola/consola_pablo.py`
+- `funcionalidades_py/inicio.py`
 
-**Reportes administrativos**
-- Top 10 de productos más vendidos, ordenados por unidades.
-- Reporte mensual de caducidades, existencias bajas actuales y alertas del 15 %.
+### Acceso mediante autenticación real
 
-### Integración con la consola
+Con el entorno virtual activo y la conexión configurada, ejecutar desde la raíz:
 
-El módulo proporciona las siguientes funciones en `funcionalidades_py/consola/consola_nathalie.py`:
-
-```python
-from funcionalidades_py.consola.consola_nathalie import (
-    menu_inventario,
-    menu_ventas,
-    menu_reportes_nathalie
-)
+```bash
+python -m funcionalidades_py.inicio
 ```
 
-Las tres funciones reciben `p_sesion`, con los datos del usuario autenticado.
+Para una instalación nueva:
 
-Los reportes administrativos están restringidos al rol `administrador`. La gestión de inventario permite los roles `administrador` y `gerente`, respetando las restricciones de sucursal. El registro de ventas admite los roles `administrador`, `gerente` y `mesero`, sujeto a las validaciones de la operación.
+1. Seleccionar `2. Crear primer administrador`.
+2. Ingresar nombre de usuario, contraseña, confirmación y sucursal habitual.
+3. Seleccionar `1. Iniciar sesión`.
+4. Ingresar las credenciales recién creadas.
 
-### Pruebas realizadas
+La creación del primer administrador solo funciona cuando no existen usuarios.
 
-Se comprobaron las siguientes operaciones en una base local PostgreSQL:
+Si ya existen usuarios, iniciar sesión con una cuenta disponible. Un administrador autenticado puede crear las demás cuentas desde gestión de usuarios.
 
-- Inicio de sesión con un administrador real.
-- Venta de dos bowls de pollo y un wrap de pollo, por Q100.00.
-- Registro de detalles de venta y descuento de ingredientes mediante FEFO.
-- Confirmación de transacciones y pruebas de reversión mediante `ROLLBACK`.
-- Auditoría automática de la venta y las actualizaciones de lotes.
-- Entrada de 1,000 gramos de pollo, registrada en el lote 21.
-- Auditoría de la entrada de inventario.
-- Top 10 con ventas registradas.
-- Reporte mensual de noviembre de 2026.
-- Consulta de existencias, lotes y alertas desde consola.
-- Rechazo de fechas inválidas y comprobaciones de permisos.
+El programa definitivo utiliza este acceso. `prueba_menu.py` es una herramienta de pruebas que omite la autenticación.
 
-Los identificadores y cantidades anteriores corresponden únicamente a la base local utilizada durante las pruebas.
+### Opciones integradas del menú
 
-### Consideraciones técnicas
+- `1`: gestión de clientes.
+- `2`: preferencias.
+- `3`: historial de clientes.
+- `4`: reportes de clientes, solo administrador.
+- `5`: gestión de visitas.
+- `6`: gestión de usuarios, solo administrador.
+- `7`: gestión de reservas.
+- `8`: administración, solo administrador.
+- `0`: cerrar sesión.
 
-El umbral del 15 % se calcula respecto a las cantidades iniciales definidas en `datos_iniciales.sql`. Esta interpretación es provisional y debe confirmarse con el equipo o el catedrático.
+### Permisos
 
-El reporte mensual filtra lotes por fecha de caducidad, pero utiliza existencias actuales para las alertas de inventario. No reconstruye existencias históricas al cierre de meses anteriores.
+El administrador puede operar sobre todas las sucursales y gestionar usuarios.
 
-La integración final con la autenticación, las visitas y el menú principal deberá comprobarse después de unir las ramas.
+Gerente y mesero tienen restringidas las operaciones de reservas y visitas a su sucursal.
 
-Para detalles de implementación, consultar `docs/modulo_nathalie.md`.
+La bitácora y los reportes administrativos están restringidos al administrador.
+
+### Reporte de sucursales
+
+Agrupa reservas y ventas por separado mediante CTEs antes de combinar sus resultados. Así evita multiplicar cantidades e importes.
+
+Por defecto excluye las reservas canceladas. Los importes utilizan el precio guardado en cada detalle de venta.
+
+Las fechas finales ingresadas en las consultas administrativas incluyen el día completo.
+
+## 13. Inventario y ventas
+
+Los módulos están desarrollados y se encuentran en revisión para integrarlos al menú principal.
+
+### Funcionalidades
+
+- Existencias utilizables por sucursal, excluyendo lotes vencidos.
+- Consulta de lotes y fechas de caducidad.
+- Entradas directas de inventario.
+- Alertas por existencias inferiores al mínimo.
+- Alertas de próxima caducidad, con ventana provisional de siete días.
+- Porcentaje disponible respecto al stock inicial de referencia.
+- Ventas asociadas a visitas abiertas.
+- Consumo conjunto de ingredientes de todos los productos de la venta.
+- Consumo FEFO: primero los lotes que caducan antes, con desempate por ID.
+- Registro de precios históricos en los detalles de venta.
+- Top 10 de productos por unidades vendidas.
+- Reporte de caducidades por mes y alertas de existencias actuales.
+
+Cada entrada o venta se ejecuta mediante el manejador compartido de transacciones.
+
+Una venta guarda cabecera, detalles y descuento de ingredientes en la misma transacción. Si falla, sus cambios deben revertirse.
+
+### Integración pendiente
+
+La consola `funcionalidades_py/consola/consola_nathalie.py` proporciona:
+
+- `menu_inventario(p_sesion)`
+- `menu_ventas(p_sesion)`
+- `menu_reportes_nathalie(p_sesion)`
+
+Inventario permite administrador y gerente, respetando la sucursal del gerente.
+
+Ventas permite administrador, gerente y mesero, respetando la sucursal de la visita.
+
+Los reportes permiten únicamente administrador.
+
+Las sesiones deben proceder del inicio de sesión real.
+
+### Interpretaciones y limitaciones
+
+El 15 % utiliza como referencia las cantidades de la carga inicial. Es una interpretación documentada del equipo: la guía no define expresamente la base del porcentaje.
+
+Los insumos sin referencia conservan su consulta de existencias y alerta por mínimo, pero no tienen un porcentaje calculado.
+
+El reporte mensual selecciona lotes por su fecha de caducidad. Las cantidades y alertas de existencias corresponden al momento de consulta, no al cierre histórico del mes.
+
+### Validación
+
+La entrega incluye pruebas individuales de entradas, ventas, FEFO, auditoría, reportes y reversión de transacciones.
+
+Después de los ajustes y la integración se comprobarán los flujos en la base local utilizada por el equipo.
+
+Los IDs, cantidades y resultados de las pruebas individuales no deben asumirse como datos presentes en otras instalaciones.
+
+Consultar `docs/modulo_nathalie.md` para los contratos de las funciones.
