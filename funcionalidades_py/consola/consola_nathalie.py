@@ -13,7 +13,20 @@ from funcionalidades_py.reportes_nathalie import (
     reporte_top_productos,
     reporte_inventario_mensual
 )
+from funcionalidades_py.inventario import (
+    consultar_existencias,
+    consultar_lotes,
+    consultar_alertas_existencias,
+    consultar_alertas_caducidad,
+    consultar_alertas_porcentaje,
+    registrar_entrada
+)
+from funcionalidades_py.transacciones import ejecutar_transaccion
 
+from funcionalidades_py.ventas import (
+    registrar_venta,
+    consultar_menu
+)
 def validar_acceso_inventario(p_sesion):
     """
     Comprueba los permisos del modulo de inventario.
