@@ -1,6 +1,31 @@
 # funcionalidades_py/administracion.py
 from funcionalidades_py.conexion import obtener_conexion
 from funcionalidades_py.usuarios import validar_permiso
+from datetime import date
+
+def _validar_periodo(p_inicio, p_fin):
+    try:
+        v_inicio = (
+            date.fromisoformat(p_inicio)
+            if isinstance(p_inicio, str)
+            else p_inicio
+        )
+
+        v_fin = (
+            date.fromisoformat(p_fin)
+            if isinstance(p_fin, str)
+            else p_fin
+        )
+    except ValueError:
+        raise ValueError("Las fechas deben tener formato AAAA-MM-DD.")
+
+    if v_inicio is not None and v_fin is not None:
+        if v_inicio > v_fin:
+            raise ValueError(
+                "La fecha inicial no puede ser posterior a la final."
+            )
+
+    return v_inicio, v_fin
 
 
 def consultar_bitacora(p_sesion: dict, p_filtros: dict | None = None) -> list[dict]:
@@ -13,10 +38,19 @@ def consultar_bitacora(p_sesion: dict, p_filtros: dict | None = None) -> list[di
 
     v_desde = v_filtros.get("fecha_desde")
     v_hasta = v_filtros.get("fecha_hasta")
+    v_desde, v_hasta = _validar_periodo(v_desde, v_hasta)
     v_id_usuario = v_filtros.get("id_usuario")
     v_tabla = (v_filtros.get("tabla") or "").strip().lower() or None
     v_operacion = (v_filtros.get("operacion") or "").strip().upper() or None
     v_limite = int(v_filtros.get("limite", 100))
+
+    if v_limite <= 0:
+        raise ValueError("El límite debe ser mayor que cero.")
+
+    if v_operacion not in (None, "INSERT", "UPDATE", "DELETE"):
+        raise ValueError(
+            "La operación debe ser INSERT, UPDATE o DELETE."
+        )
 
     v_conexion = obtener_conexion()
     try:
@@ -33,7 +67,7 @@ def consultar_bitacora(p_sesion: dict, p_filtros: dict | None = None) -> list[di
                 FROM bitacora b
                 LEFT JOIN usuario u ON u.id_usuario = b.id_usuario
                 WHERE (%s::timestamp IS NULL OR b.fecha_hora >= %s::timestamp)
-                  AND (%s::timestamp IS NULL OR b.fecha_hora <= %s::timestamp)
+                  AND (%s::date IS NULL OR b.fecha_hora < (%s::date + INTERVAL '1 day'))
                   AND (%s::integer IS NULL OR b.id_usuario = %s::integer)
                   AND (%s::varchar IS NULL OR LOWER(b.tabla) = %s::varchar)
                   AND (%s::varchar IS NULL OR b.operacion = %s::varchar)
@@ -67,6 +101,11 @@ def generar_reporte_sucursales(
     Agrega reservas y ventas por separado mediante CTEs antes de combinarlas.
     """
     validar_permiso(p_sesion, ("administrador",))
+
+    p_fecha_inicio, p_fecha_fin = _validar_periodo(
+        p_fecha_inicio,
+        p_fecha_fin
+    )
 
     v_conexion = obtener_conexion()
     try:

@@ -7,6 +7,32 @@ from funcionalidades_py.usuarios import validar_permiso, validar_acceso_sucursal
 ESTADOS_RESERVA = ("confirmada", "cancelada", "atendida", "no_asistio")
 ZONAS_MESA = ("interior", "exterior")
 
+def _validar_horario(p_inicio, p_fin):
+    try:
+        v_inicio = (
+            datetime.fromisoformat(p_inicio)
+            if isinstance(p_inicio, str)
+            else p_inicio
+        )
+
+        v_fin = (
+            datetime.fromisoformat(p_fin)
+            if isinstance(p_fin, str)
+            else p_fin
+        )
+    except ValueError:
+        raise ValueError(
+            "Ingrese fechas válidas con formato AAAA-MM-DD HH:MM."
+        )
+
+    if not isinstance(v_inicio, datetime) or not isinstance(v_fin, datetime):
+        raise ValueError("Debe indicar fecha y hora de inicio y fin.")
+
+    if v_fin <= v_inicio:
+        raise ValueError(
+            "La fecha y hora final debe ser posterior a la inicial."
+        )
+
 
 def consultar_mesas_disponibles(
     p_id_sucursal: int,
@@ -19,6 +45,11 @@ def consultar_mesas_disponibles(
     Devuelve las mesas disponibles de una sucursal para el horario indicado.
     Reutilizable tanto en reservas como en el módulo de visitas antes de ocupar una mesa.
     """
+    _validar_horario(
+        p_fecha_hora_inicio,
+        p_fecha_hora_fin_estimada
+    )
+
     if p_zona and p_zona not in ZONAS_MESA:
         raise ValueError(f"Zona inválida. Debe ser una de: {ZONAS_MESA}.")
 
@@ -69,6 +100,7 @@ def _validar_mesas_en_transaccion(
     p_id_reserva_excluir: int | None = None,
 ) -> None:
     """Verifica sucursal, misma zona, capacidad suficiente y horario sin superposición."""
+    _validar_horario(p_inicio, p_fin)
     if not p_ids_mesas:
         raise ValueError("Debe asignar al menos una mesa a la reserva.")
 
@@ -221,15 +253,31 @@ def op_modificar_reserva(p_conexion, p_sesion: dict, p_datos: dict) -> bool:
 
         v_nuevo_ini = p_datos.get("fecha_hora_inicio") or v_ini_act
         v_nuevo_fin = p_datos.get("fecha_hora_fin_estimada") or v_fin_act
-        v_nueva_cant = int(p_datos.get("cantidad_personas") or v_cant_act)
+
+        v_nueva_cant = int(
+            p_datos.get("cantidad_personas", v_cant_act)
+        )
+
+        if v_nueva_cant <= 0:
+            raise ValueError(
+                "La cantidad de personas debe ser mayor que cero."
+            )
+
         v_nuevas_mesas = p_datos.get("ids_mesas")
 
         if v_nuevas_mesas is None:
             v_cur.execute(
-                "SELECT id_mesa FROM reserva_mesa WHERE id_reserva = %s::integer;",
-                (int(v_id_reserva),),
+                """
+                SELECT id_mesa
+                FROM reserva_mesa
+                WHERE id_reserva = %s;
+                """,
+                (int(v_id_reserva),)
             )
-            v_nuevas_mesas = [f[0] for f in v_cur.fetchall()]
+
+            v_nuevas_mesas = [
+                v_fila[0] for v_fila in v_cur.fetchall()
+            ]
 
         _validar_mesas_en_transaccion(
             v_cur,
@@ -376,32 +424,12 @@ def buscar_reservas(p_sesion: dict, p_filtros: dict | None = None) -> list[dict]
         v_conexion.close()
 
 
-def obtener_reservas_por_cliente(p_id_cliente: int) -> list[dict]:
-    """Devuelve las reservas de un cliente para integrarse con el historial de clientes."""
-    v_conexion = obtener_conexion()
-    try:
-        with v_conexion.cursor() as v_cur:
-            v_cur.execute(
-                """
-                SELECT r.id_reserva,
-                       r.id_sucursal,
-                       s.nombre AS sucursal,
-                       r.fecha_hora_inicio,
-                       r.fecha_hora_fin_estimada,
-                       r.cantidad_personas,
-                       r.estado,
-                       STRING_AGG('Mesa #' || m.numero || ' (' || m.zona || ')', ', ' ORDER BY m.numero) AS mesas
-                FROM reserva r
-                JOIN sucursal s ON s.id_sucursal = r.id_sucursal
-                LEFT JOIN reserva_mesa rm ON rm.id_reserva = r.id_reserva
-                LEFT JOIN mesa m ON m.id_mesa = rm.id_mesa
-                WHERE r.id_cliente = %s::integer
-                GROUP BY r.id_reserva, s.nombre
-                ORDER BY r.fecha_hora_inicio DESC;
-                """,
-                (int(p_id_cliente),),
-            )
-            v_cols = [d[0] for d in v_cur.description]
-            return [dict(zip(v_cols, f)) for f in v_cur.fetchall()]
-    finally:
-        v_conexion.close()
+def obtener_reservas_por_cliente(
+    p_sesion: dict,
+    p_id_cliente: int
+) -> list[dict]:
+    """Consulta las reservas del cliente respetando la sucursal."""
+    return buscar_reservas(
+        p_sesion,
+        {"id_cliente": p_id_cliente}
+    )
