@@ -25,3 +25,71 @@ Importar de `funcionalidades_py.consola.consola_nathalie` las funciones `menu_in
 
 ## Precauciones
 No publicar `config.ini`, `.venv`, hashes ni credenciales. La comprobación de rol basada en un diccionario solo es confiable cuando la sesión proviene de autenticación real. Las lecturas antiguas de pruebas sin sesión deben adaptarse al nuevo contrato protegido.
+
+## Alertas de inventario y criterio del 15 %
+
+El modulo implementa dos criterios independientes para
+detectar existencias bajas:
+
+- Existencias inferiores al minimo establecido en la
+  tabla `insumo`.
+- Existencias iguales o inferiores al 15 % del stock
+  inicial definido en `datos_iniciales.sql`.
+
+El porcentaje se calcula mediante:
+
+Porcentaje disponible =
+(existencia utilizable / stock inicial de referencia) * 100
+
+El criterio del 15 % es una interpretacion provisional
+que debera confirmarse con el equipo o el catedratico.
+
+Las alertas de caducidad utilizan provisionalmente una
+ventana de siete dias.
+
+## Reporte mensual de inventario
+
+El reporte combina:
+
+1. Lotes cuya fecha de caducidad pertenece al mes
+   seleccionado.
+2. Insumos actualmente por debajo del minimo.
+3. Insumos actualmente al 15 % o menos del stock inicial.
+
+Las existencias y porcentajes reflejan el estado actual
+de la base de datos. El reporte no reconstruye
+existencias historicas al cierre de meses anteriores.
+
+## Pruebas funcionales realizadas
+
+- Autenticacion con un administrador registrado.
+- Registro de venta de Q100.00.
+- Descuento de ingredientes siguiendo FEFO.
+- Registro de detalles y precios de venta.
+- Auditoria automatica de venta y actualizaciones de lotes.
+- Registro de entrada de 1000 gramos de pollo.
+- Auditoria de la entrada de inventario.
+- Reporte Top 10 con ventas reales.
+- Reporte mensual de noviembre de 2026.
+- Consulta de existencias, lotes y alertas desde consola.
+- Rechazo de fechas de entrada invalidas.
+- Validaciones de permisos para reportes administrativos.
+
+## Integracion con el sistema
+
+Funciones disponibles para el menu principal:
+
+- `menu_inventario(p_sesion)`
+- `menu_ventas(p_sesion)`
+- `menu_reportes_nathalie(p_sesion)`
+
+Ubicacion:
+`funcionalidades_py/consola/consola_nathalie.py`
+
+La sesion debe provenir del modulo de autenticacion
+del sistema y contener `id_usuario`, `rol` e
+`id_sucursal`.
+
+Las operaciones de escritura utilizan
+`ejecutar_transaccion()` para gestionar COMMIT,
+ROLLBACK y auditoria.

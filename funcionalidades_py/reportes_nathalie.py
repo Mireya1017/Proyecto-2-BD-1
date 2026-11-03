@@ -7,6 +7,10 @@
 
 from datetime import date
 from funcionalidades_py.conexion import obtener_conexion
+from funcionalidades_py.inventario import (
+    consultar_alertas_existencias,
+    consultar_alertas_porcentaje
+)
 
 
 # =====================================================
@@ -177,3 +181,87 @@ def reporte_caducidades_mensual(
             )
 
             return v_cursor.fetchall()
+
+# =====================================================
+# REPORTE 2 COMPLETO: INVENTARIO MENSUAL
+# Responsable: Nathalie
+# =====================================================
+
+def reporte_inventario_mensual(
+    p_sesion,
+    p_anio,
+    p_mes,
+    p_id_sucursal
+):
+    """
+    Genera un reporte combinado de inventario.
+
+    Incluye:
+    1. Lotes que caducan durante el mes seleccionado.
+    2. Insumos actualmente por debajo del minimo.
+    3. Estado actual respecto al 15 % del stock inicial.
+
+    IMPORTANTE:
+    No reconstruye existencias historicas.
+    Las cantidades son las actuales al consultar.
+    """
+
+    validar_permiso_reportes(p_sesion)
+
+    # Validar parametros del periodo
+    try:
+        v_anio = int(p_anio)
+        v_mes = int(p_mes)
+        v_sucursal = int(p_id_sucursal)
+
+        date(v_anio, v_mes, 1)
+
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(
+            "El anio, mes o sucursal no son validos."
+        )
+
+    if v_sucursal <= 0:
+        raise ValueError("La sucursal debe ser valida.")
+
+    # 1. Caducidades del mes
+    v_caducidades = reporte_caducidades_mensual(
+        p_sesion,
+        v_anio,
+        v_mes,
+        v_sucursal
+    )
+
+    # 2. Existencias actuales por debajo del minimo
+    v_existencias_bajas = consultar_alertas_existencias(
+        v_sucursal,
+        p_sesion
+    )
+
+    # 3. Porcentajes actuales respecto al stock inicial
+    v_porcentajes = consultar_alertas_porcentaje(
+        p_sesion,
+        v_sucursal
+    )
+
+    v_alertas_porcentaje = [
+        v_fila
+        for v_fila in v_porcentajes
+        if v_fila["estado"] == "ALERTA 15%"
+    ]
+
+    return {
+        "anio": v_anio,
+        "mes": v_mes,
+        "id_sucursal": v_sucursal,
+        "caducidades": v_caducidades,
+        "existencias_bajas": v_existencias_bajas,
+        "alertas_15": v_alertas_porcentaje,
+        "porcentajes": v_porcentajes,
+        "nota": (
+            "Las caducidades corresponden al periodo "
+            "seleccionado. Las existencias y porcentajes "
+            "corresponden al inventario actual, "
+            "no al cierre historico del mes."
+        )
+    }

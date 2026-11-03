@@ -290,3 +290,101 @@ def consultar_alertas_caducidad(p_id_sucursal, p_dias=7, *, p_sesion):
                 (p_id_sucursal, p_dias)
             )
             return v_cursor.fetchall()
+
+
+# =====================================================
+# ALERTAS DE INVENTARIO AL 15 %
+# Responsable: Nathalie
+# Referencia: datos_iniciales.sql
+# =====================================================
+
+from decimal import Decimal
+
+
+STOCK_REFERENCIA = {
+    "Pollo": Decimal("5000"),
+    "Carne de res": Decimal("5000"),
+    "Arroz": Decimal("10000"),
+    "Frijoles": Decimal("8000"),
+    "Lechuga": Decimal("2000"),
+    "Tortilla para wrap": Decimal("100"),
+    "Sprite en lata": Decimal("48"),
+    "Coca-Cola en lata": Decimal("48"),
+    "Agua pura embotellada": Decimal("48")
+}
+
+
+def consultar_alertas_porcentaje(p_sesion, p_id_sucursal):
+    """
+    Calcula el porcentaje de inventario disponible.
+
+    El 100 % corresponde al stock inicial definido
+    en datos_iniciales.sql.
+
+    La alerta del 15 % es un criterio provisional.
+    """
+
+    validar_acceso_inventario(p_sesion, p_id_sucursal)
+
+    v_sql = """
+        SELECT
+            i.nombre,
+            i.unidad_medida,
+            i.existencia_minima,
+            COALESCE(
+                SUM(l.cantidad_disponible) FILTER (
+                    WHERE l.fecha_caducidad >= CURRENT_DATE
+                ), 0
+            ) AS existencia_actual
+        FROM insumo AS i
+        LEFT JOIN lote AS l
+            ON l.id_insumo = i.id_insumo
+           AND l.id_sucursal = %s
+        GROUP BY
+            i.id_insumo,
+            i.nombre,
+            i.unidad_medida,
+            i.existencia_minima
+        ORDER BY i.nombre;
+    """
+
+    with obtener_conexion() as v_conexion:
+        with v_conexion.cursor() as v_cursor:
+            v_cursor.execute(v_sql, (p_id_sucursal,))
+            v_resultados = v_cursor.fetchall()
+
+    v_alertas = []
+
+    for v_nombre, v_unidad, v_minimo, v_actual in v_resultados:
+
+        if v_nombre not in STOCK_REFERENCIA:
+            raise ValueError(
+                f"No existe referencia inicial para {v_nombre}."
+            )
+
+        v_referencia = STOCK_REFERENCIA[v_nombre]
+
+        v_porcentaje = (
+            Decimal(str(v_actual)) / v_referencia
+        ) * Decimal("100")
+
+        if v_porcentaje <= Decimal("15"):
+            v_estado = "ALERTA 15%"
+        elif Decimal(str(v_actual)) < Decimal(str(v_minimo)):
+            v_estado = "BAJO MINIMO"
+        else:
+            v_estado = "NORMAL"
+
+        v_alertas.append({
+            "insumo": v_nombre,
+            "unidad": v_unidad,
+            "existencia_actual": v_actual,
+            "referencia": v_referencia,
+            "porcentaje": v_porcentaje.quantize(
+                Decimal("0.01")
+            ),
+            "minimo": v_minimo,
+            "estado": v_estado
+        })
+
+    return v_alertas

@@ -1,24 +1,36 @@
-
 # =====================================================
 # CONSOLA DE INVENTARIO Y VENTAS
 # Responsable: Nathalie
 # Proyecto 02 - Base de Datos 1
 # =====================================================
 
+
+# =====================================================
+# IMPORTACIONES - CONSOLA DE INVENTARIO Y VENTAS
+# Responsable: Nathalie
+# =====================================================
+
 from funcionalidades_py.inventario import (
     consultar_existencias,
     consultar_lotes,
     consultar_alertas_existencias,
-    consultar_alertas_caducidad
-)
-from funcionalidades_py.inventario import registrar_entrada
-from funcionalidades_py.transacciones import ejecutar_transaccion
-from funcionalidades_py.ventas import registrar_venta, consultar_menu
-from funcionalidades_py.reportes_nathalie import (
-    reporte_top_productos,
-    reporte_caducidades_mensual
+    consultar_alertas_caducidad,
+    consultar_alertas_porcentaje,
+    registrar_entrada
 )
 
+from funcionalidades_py.transacciones import ejecutar_transaccion
+
+from funcionalidades_py.ventas import (
+    registrar_venta,
+    consultar_menu
+)
+
+from funcionalidades_py.reportes_nathalie import (
+    reporte_top_productos,
+    reporte_caducidades_mensual,
+    reporte_inventario_mensual
+)
 
 def validar_acceso_inventario(p_sesion):
     """
@@ -38,8 +50,6 @@ def validar_acceso_inventario(p_sesion):
 
     if p_sesion.get("id_sucursal") is None:
         raise PermissionError("La sesion no tiene sucursal.")
-
-
 def seleccionar_sucursal(p_sesion):
     """
     Obtiene la sucursal autorizada para el usuario.
@@ -69,8 +79,6 @@ def mostrar_existencias(p_sesion):
             f"Disponible: {v_fila[4]} {v_fila[2]} | "
             f"Minimo: {v_fila[3]}"
         )
-
-
 def mostrar_lotes(p_sesion):
     v_sucursal = seleccionar_sucursal(p_sesion)
     v_insumo = int(input("Ingrese ID del insumo: "))
@@ -91,29 +99,36 @@ def mostrar_lotes(p_sesion):
             f"Estado: {v_fila[5]}"
         )
 
-
 def mostrar_alertas(p_sesion):
+    """Muestra alertas de existencias, caducidad y porcentaje."""
+
     v_sucursal = seleccionar_sucursal(p_sesion)
 
-    print("\n===== ALERTAS DE EXISTENCIAS =====")
+    # 1. Existencias por debajo del minimo
+    print("\n===== EXISTENCIAS POR DEBAJO DEL MINIMO =====")
 
-    v_alertas = consultar_alertas_existencias(v_sucursal, p_sesion)
+    v_alertas = consultar_alertas_existencias(
+        v_sucursal,
+        p_sesion
+    )
 
     if not v_alertas:
         print("No hay insumos por debajo del minimo.")
     else:
         for v_fila in v_alertas:
             print(
-                f"{v_fila[0]} | "
+                f"Insumo: {v_fila[0]} | "
                 f"Disponible: {v_fila[3]} {v_fila[1]} | "
                 f"Minimo: {v_fila[2]}"
             )
 
-    print("\n===== ALERTAS DE CADUCIDAD =====")
+    # 2. Proxima caducidad
+    print("\n===== PROXIMA CADUCIDAD (7 DIAS) =====")
 
-    # Ventana provisional de siete dias.
     v_caducidades = consultar_alertas_caducidad(
-        v_sucursal, 7, p_sesion=p_sesion
+        v_sucursal,
+        7,
+        p_sesion=p_sesion
     )
 
     if not v_caducidades:
@@ -121,17 +136,33 @@ def mostrar_alertas(p_sesion):
     else:
         for v_fila in v_caducidades:
             print(
-                f"{v_fila[0]} | "
+                f"Insumo: {v_fila[0]} | "
                 f"Lote: {v_fila[1]} | "
                 f"Caducidad: {v_fila[2]} | "
+                f"Disponible: {v_fila[3]} {v_fila[4]} | "
                 f"Dias restantes: {v_fila[5]}"
             )
 
+    # 3. Porcentaje del inventario inicial
+    print("\n===== INVENTARIO RESPECTO AL 15 % INICIAL =====")
+
+    v_porcentajes = consultar_alertas_porcentaje(
+        p_sesion,
+        v_sucursal
+    )
+
+    for v_fila in v_porcentajes:
+        print(
+            f"Insumo: {v_fila['insumo']} | "
+            f"Disponible: {v_fila['existencia_actual']} "
+            f"{v_fila['unidad']} | "
+            f"Porcentaje: {v_fila['porcentaje']}% | "
+            f"Estado: {v_fila['estado']}"
+        )
+
+
 def mostrar_registro_entrada(p_sesion):
-    """
-    Solicita los datos de una entrada de inventario
-    y ejecuta su registro en PostgreSQL.
-    """
+    """Registra una entrada mediante la transaccion compartida."""
 
     validar_acceso_inventario(p_sesion)
 
@@ -153,6 +184,41 @@ def mostrar_registro_entrada(p_sesion):
         ).strip()
     }
 
+    # Validar fechas antes de modificar PostgreSQL
+    from datetime import date
+
+    try:
+        v_recepcion = date.fromisoformat(
+            v_datos["fecha_recepcion"]
+        )
+        v_caducidad = date.fromisoformat(
+            v_datos["fecha_caducidad"]
+        )
+    except ValueError:
+        raise ValueError(
+            "Formato de fecha invalido. Utilice AAAA-MM-DD."
+        )
+
+    if v_caducidad < v_recepcion:
+        raise ValueError(
+            "La caducidad no puede ser anterior a la recepcion."
+        )
+
+    print("\n===== CONFIRMAR ENTRADA =====")
+    print(f"Sucursal: {v_sucursal}")
+    print(f"Insumo ID: {v_datos['id_insumo']}")
+    print(f"Cantidad: {v_datos['cantidad']}")
+    print(f"Recepcion: {v_recepcion}")
+    print(f"Caducidad: {v_caducidad}")
+
+    v_confirmacion = input(
+        "\nConfirmar registro (SI/NO): "
+    ).strip().upper()
+
+    if v_confirmacion != "SI":
+        print("Operacion cancelada.")
+        return
+
     v_id_lote = ejecutar_transaccion(
         p_sesion,
         registrar_entrada,
@@ -160,7 +226,6 @@ def mostrar_registro_entrada(p_sesion):
     )
 
     print(f"\nEntrada registrada. ID del lote: {v_id_lote}")
-
 
 # =====================================================
 # REGISTRO DE VENTAS DESDE CONSOLA
@@ -174,6 +239,9 @@ def mostrar_registro_venta(p_sesion):
     Utiliza la operacion transaccional registrar_venta
     y la conexion compartida del proyecto.
     """
+
+    if not isinstance(p_sesion, dict) or p_sesion.get("id_usuario") is None:
+        raise PermissionError("Se requiere una sesion autenticada.")
 
     if p_sesion.get("rol") not in (
         "administrador", "gerente", "mesero"
@@ -230,8 +298,7 @@ def mostrar_registro_venta(p_sesion):
         "id_visita": v_id_visita,
         "productos": v_productos
     }
-
-    # Ejecutar toda la venta en una transaccion
+# Ejecutar toda la venta en una transaccion
     v_resultado = ejecutar_transaccion(
         p_sesion,
         registrar_venta,
@@ -298,6 +365,9 @@ def menu_ventas(p_sesion):
     Menu de ventas para integrar con el menu principal.
     """
 
+    if not isinstance(p_sesion, dict) or p_sesion.get("id_usuario") is None:
+        raise PermissionError("Se requiere una sesion autenticada.")
+
     if p_sesion.get("rol") not in (
         "administrador", "gerente", "mesero"
     ):
@@ -341,6 +411,7 @@ def menu_ventas(p_sesion):
         except Exception as v_error:
             print(f"No se pudo completar la operacion: {v_error}")
 
+
 # =====================================================
 # MENU DE REPORTES DE NATHALIE
 # Proyecto 02 - Base de Datos 1
@@ -362,7 +433,7 @@ def menu_reportes_nathalie(p_sesion):
     while True:
         print("\n===== REPORTES DE INVENTARIO Y VENTAS =====")
         print("1. Top 10 de productos mas vendidos")
-        print("2. Caducidades por mes y sucursal")
+        print("2. Reporte mensual de inventario")        
         print("3. Insumos bajo minimo (existencias actuales)")
         print("0. Regresar al menu principal")
 
@@ -384,35 +455,70 @@ def menu_reportes_nathalie(p_sesion):
                         f"Ingresos: Q{v_fila[3]:.2f}"
                     )
 
+            
             elif v_opcion == "2":
+                print("\n===== REPORTE MENSUAL DE INVENTARIO =====")
+
                 v_anio = int(input("Anio (AAAA): "))
                 v_mes = int(input("Mes (1-12): "))
-                v_sucursal = int(
-                    input("ID de sucursal: ")
-                )
+                v_sucursal = int(input("ID de sucursal: "))
 
-                v_resultados = reporte_caducidades_mensual(
+                v_reporte = reporte_inventario_mensual(
                     p_sesion,
                     v_anio,
                     v_mes,
                     v_sucursal
                 )
 
-                print("\n===== CADUCIDADES MENSUALES =====")
-                print(f"Periodo: {v_mes:02d}/{v_anio}")
-                print(f"Sucursal ID: {v_sucursal}")
+                print(
+                    f"\nPeriodo: {v_reporte['mes']:02d}/"
+                    f"{v_reporte['anio']}"
+                )
+                print(f"Sucursal ID: {v_reporte['id_sucursal']}")
 
-                if not v_resultados:
+                # 1. Caducidades del mes
+                print("\n--- LOTES QUE CADUCAN EN EL MES ---")
+
+                if not v_reporte["caducidades"]:
                     print("No hay lotes para este periodo.")
+                else:
+                    for v_fila in v_reporte["caducidades"]:
+                        print(
+                            f"{v_fila[1]} | "
+                            f"Lote: {v_fila[2]} | "
+                            f"Caducidad: {v_fila[3]} | "
+                            f"Disponible actual: "
+                            f"{v_fila[4]} {v_fila[5]}"
+                        )
 
-                for v_fila in v_resultados:
-                    print(
-                        f"{v_fila[1]} | "
-                        f"Lote: {v_fila[2]} | "
-                        f"Caducidad: {v_fila[3]} | "
-                        f"Disponible actual: "
-                        f"{v_fila[4]} {v_fila[5]}"
-                    )
+                # 2. Existencias bajas
+                print("\n--- EXISTENCIAS BAJO EL MINIMO ---")
+
+                if not v_reporte["existencias_bajas"]:
+                    print("No hay insumos bajo el minimo.")
+                else:
+                    for v_fila in v_reporte["existencias_bajas"]:
+                        print(
+                            f"{v_fila[0]} | "
+                            f"Disponible: {v_fila[3]} {v_fila[1]} | "
+                            f"Minimo: {v_fila[2]}"
+                        )
+
+                # 3. Alertas del 15 %
+                print("\n--- ALERTAS DEL 15 % ---")
+
+                if not v_reporte["alertas_15"]:
+                    print("No hay alertas del 15 %.")
+                else:
+                    for v_fila in v_reporte["alertas_15"]:
+                        print(
+                            f"{v_fila['insumo']} | "
+                            f"Disponible: {v_fila['existencia_actual']} | "
+                            f"Porcentaje: {v_fila['porcentaje']}%"
+                        )
+
+                print(f"\nNota: {v_reporte['nota']}")
+
 
             elif v_opcion == "3":
                 v_sucursal = int(input("ID de sucursal: "))
@@ -434,4 +540,3 @@ def menu_reportes_nathalie(p_sesion):
 
         except Exception as v_error:
             print(f"No se pudo generar el reporte: {v_error}")
-            

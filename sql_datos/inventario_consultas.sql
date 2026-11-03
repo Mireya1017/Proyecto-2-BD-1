@@ -215,3 +215,84 @@ FROM ingredientes_necesarios AS n
 JOIN existencias AS e
     ON n.id_insumo = e.id_insumo
 ORDER BY e.ingrediente;
+
+-- =====================================================
+-- CONSULTA 7: ALERTAS DE INVENTARIO AL 15 %
+-- Responsable: Nathalie
+--
+-- Referencia: cantidades iniciales de datos_iniciales.sql
+-- Criterio provisional:
+-- Alerta cuando existencia_actual <= 15% del stock inicial.
+--
+-- Se conserva por separado la alerta de existencia_minima.
+-- No representa inventario historico.
+-- =====================================================
+-- =====================================================
+-- ALERTAS DE INVENTARIO AL 15 %
+-- Responsable: Nathalie
+-- Referencia: datos_iniciales.sql
+-- =====================================================
+
+WITH stock_referencia AS (
+    SELECT *
+    FROM (
+        VALUES
+            ('Pollo', 5000::NUMERIC),
+            ('Carne de res', 5000::NUMERIC),
+            ('Arroz', 10000::NUMERIC),
+            ('Frijoles', 8000::NUMERIC),
+            ('Lechuga', 2000::NUMERIC),
+            ('Tortilla para wrap', 100::NUMERIC),
+            ('Sprite en lata', 48::NUMERIC),
+            ('Coca-Cola en lata', 48::NUMERIC),
+            ('Agua pura embotellada', 48::NUMERIC)
+    ) AS r(nombre, cantidad_referencia)
+),
+existencias AS (
+    SELECT
+        s.nombre AS sucursal,
+        i.nombre AS insumo,
+        i.unidad_medida,
+        i.existencia_minima,
+        r.cantidad_referencia,
+        COALESCE(
+            SUM(l.cantidad_disponible) FILTER (
+                WHERE l.fecha_caducidad >= CURRENT_DATE
+            ), 0
+        ) AS existencia_actual
+    FROM sucursal AS s
+    CROSS JOIN insumo AS i
+    JOIN stock_referencia AS r
+        ON r.nombre = i.nombre
+    LEFT JOIN lote AS l
+        ON l.id_sucursal = s.id_sucursal
+       AND l.id_insumo = i.id_insumo
+    GROUP BY
+        s.id_sucursal,
+        s.nombre,
+        i.id_insumo,
+        i.nombre,
+        i.unidad_medida,
+        i.existencia_minima,
+        r.cantidad_referencia
+)
+SELECT
+    sucursal,
+    insumo,
+    existencia_actual,
+    cantidad_referencia,
+    ROUND(
+        existencia_actual * 100
+        / NULLIF(cantidad_referencia, 0),
+        2
+    ) AS porcentaje_disponible,
+    existencia_minima,
+    CASE
+        WHEN existencia_actual <= cantidad_referencia * 0.15
+            THEN 'ALERTA 15%'
+        WHEN existencia_actual < existencia_minima
+            THEN 'BAJO MINIMO'
+        ELSE 'NORMAL'
+    END AS estado
+FROM existencias
+ORDER BY sucursal, insumo;
