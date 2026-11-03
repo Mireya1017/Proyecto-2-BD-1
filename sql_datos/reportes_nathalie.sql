@@ -12,8 +12,6 @@ WITH ventas_productos AS (
             dv.cantidad * dv.precio_unitario
         ) AS ingresos_totales
     FROM detalle_venta AS dv
-    JOIN venta AS v
-        ON dv.id_venta = v.id_venta
     GROUP BY dv.id_plato
 )
 SELECT

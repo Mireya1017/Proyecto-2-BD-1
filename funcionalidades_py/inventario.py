@@ -5,12 +5,15 @@
 # =====================================================
 
 from funcionalidades_py.conexion import obtener_conexion
+from datetime import date
+from decimal import Decimal
+
 
 
 def validar_acceso_inventario(p_sesion, p_id_sucursal):
     """Exige sesion confiable y limita gerente a su sucursal."""
     if not isinstance(p_sesion, dict) or p_sesion.get("rol") not in ("administrador", "gerente"):
-        raise PermissionError("No tiene permisos para consultar inventario.")
+        raise PermissionError("No tiene permisos para acceder al inventario.")
     if p_sesion.get("id_usuario") is None:
         raise PermissionError("Se requiere una sesion autenticada.")
     if isinstance(p_id_sucursal, bool) or not str(p_id_sucursal).isdigit() or int(p_id_sucursal) <= 0:
@@ -107,10 +110,6 @@ def consultar_lotes(p_id_sucursal, p_id_insumo, p_sesion):
 # Responsable: Nathalie
 # =====================================================
 
-from datetime import date
-from decimal import Decimal
-
-
 def registrar_entrada(p_conexion, p_sesion, p_datos):
     """
     Registra un nuevo lote de inventario.
@@ -127,22 +126,11 @@ def registrar_entrada(p_conexion, p_sesion, p_datos):
     ejecutar_transaccion().
     """
 
-    # 1. Validar permisos
-    if not isinstance(p_sesion, dict) or p_sesion.get("id_usuario") is None:
-        raise PermissionError("Se requiere una sesion autenticada.")
-    v_rol = p_sesion["rol"]
-    v_sucursal_usuario = p_sesion["id_sucursal"]
-    v_sucursal = int(p_datos["id_sucursal"])
-
-    if v_rol not in ("administrador", "gerente"):
-        raise PermissionError(
-            "No tiene permisos para registrar entradas."
-        )
-
-    if v_rol == "gerente" and v_sucursal != int(v_sucursal_usuario):
-        raise PermissionError(
-            "Solo puede registrar entradas en su sucursal."
-        )
+    # Validar rol y acceso a la sucursal.
+    v_sucursal = validar_acceso_inventario(
+        p_sesion,
+        p_datos["id_sucursal"]
+    )
 
     # 2. Obtener y validar datos
     v_insumo = int(p_datos["id_insumo"])
@@ -202,49 +190,21 @@ def registrar_entrada(p_conexion, p_sesion, p_datos):
 # =====================================================
 
 def consultar_alertas_existencias(p_id_sucursal, p_sesion):
-    """
-    Devuelve los insumos cuya existencia utilizable
-    es inferior al minimo establecido.
-    """
+    """Devuelve los insumos actualmente por debajo del mínimo."""
+    v_existencias = consultar_existencias(
+        p_id_sucursal,
+        p_sesion
+    )
 
-    p_id_sucursal = validar_acceso_inventario(p_sesion, p_id_sucursal)
+    v_alertas = []
 
-    v_sql = """
-        WITH existencias AS (
-            SELECT
-                i.id_insumo,
-                i.nombre,
-                i.unidad_medida,
-                i.existencia_minima,
-                COALESCE(
-                    SUM(l.cantidad_disponible) FILTER (
-                        WHERE l.fecha_caducidad >= CURRENT_DATE
-                    ), 0
-                ) AS existencia_utilizable
-            FROM insumo AS i
-            LEFT JOIN lote AS l
-                ON l.id_insumo = i.id_insumo
-               AND l.id_sucursal = %s
-            GROUP BY
-                i.id_insumo,
-                i.nombre,
-                i.unidad_medida,
-                i.existencia_minima
-        )
-        SELECT
-            nombre,
-            unidad_medida,
-            existencia_minima,
-            existencia_utilizable
-        FROM existencias
-        WHERE existencia_utilizable < existencia_minima
-        ORDER BY nombre;
-    """
+    for v_id, v_nombre, v_unidad, v_minimo, v_actual in v_existencias:
+        if v_actual < v_minimo:
+            v_alertas.append(
+                (v_nombre, v_unidad, v_minimo, v_actual)
+            )
 
-    with obtener_conexion() as v_conexion:
-        with v_conexion.cursor() as v_cursor:
-            v_cursor.execute(v_sql, (p_id_sucursal,))
-            return v_cursor.fetchall()
+    return v_alertas
 
 
 def consultar_alertas_caducidad(p_id_sucursal, p_dias=7, *, p_sesion):
@@ -298,7 +258,7 @@ def consultar_alertas_caducidad(p_id_sucursal, p_dias=7, *, p_sesion):
 # Referencia: datos_iniciales.sql
 # =====================================================
 
-from decimal import Decimal
+
 
 
 STOCK_REFERENCIA = {
@@ -315,76 +275,40 @@ STOCK_REFERENCIA = {
 
 
 def consultar_alertas_porcentaje(p_sesion, p_id_sucursal):
-    """
-    Calcula el porcentaje de inventario disponible.
+    """Calcula porcentajes usando el stock inicial como referencia."""
+    v_existencias = consultar_existencias(
+        p_id_sucursal,
+        p_sesion
+    )
 
-    El 100 % corresponde al stock inicial definido
-    en datos_iniciales.sql.
+    v_resultados = []
 
-    La alerta del 15 % es un criterio provisional.
-    """
+    for v_id, v_nombre, v_unidad, v_minimo, v_actual in v_existencias:
+        v_referencia = STOCK_REFERENCIA.get(v_nombre)
+        v_porcentaje = None
 
-    validar_acceso_inventario(p_sesion, p_id_sucursal)
+        if v_referencia is not None and v_referencia > 0:
+            v_porcentaje = (
+                v_actual * Decimal("100") / v_referencia
+            ).quantize(Decimal("0.01"))
 
-    v_sql = """
-        SELECT
-            i.nombre,
-            i.unidad_medida,
-            i.existencia_minima,
-            COALESCE(
-                SUM(l.cantidad_disponible) FILTER (
-                    WHERE l.fecha_caducidad >= CURRENT_DATE
-                ), 0
-            ) AS existencia_actual
-        FROM insumo AS i
-        LEFT JOIN lote AS l
-            ON l.id_insumo = i.id_insumo
-           AND l.id_sucursal = %s
-        GROUP BY
-            i.id_insumo,
-            i.nombre,
-            i.unidad_medida,
-            i.existencia_minima
-        ORDER BY i.nombre;
-    """
-
-    with obtener_conexion() as v_conexion:
-        with v_conexion.cursor() as v_cursor:
-            v_cursor.execute(v_sql, (p_id_sucursal,))
-            v_resultados = v_cursor.fetchall()
-
-    v_alertas = []
-
-    for v_nombre, v_unidad, v_minimo, v_actual in v_resultados:
-
-        if v_nombre not in STOCK_REFERENCIA:
-            raise ValueError(
-                f"No existe referencia inicial para {v_nombre}."
-            )
-
-        v_referencia = STOCK_REFERENCIA[v_nombre]
-
-        v_porcentaje = (
-            Decimal(str(v_actual)) / v_referencia
-        ) * Decimal("100")
-
-        if v_porcentaje <= Decimal("15"):
+        if v_porcentaje is not None and v_porcentaje <= 15:
             v_estado = "ALERTA 15%"
-        elif Decimal(str(v_actual)) < Decimal(str(v_minimo)):
+        elif v_actual < v_minimo:
             v_estado = "BAJO MINIMO"
+        elif v_porcentaje is None:
+            v_estado = "SIN REFERENCIA"
         else:
             v_estado = "NORMAL"
 
-        v_alertas.append({
+        v_resultados.append({
             "insumo": v_nombre,
             "unidad": v_unidad,
             "existencia_actual": v_actual,
             "referencia": v_referencia,
-            "porcentaje": v_porcentaje.quantize(
-                Decimal("0.01")
-            ),
+            "porcentaje": v_porcentaje,
             "minimo": v_minimo,
             "estado": v_estado
         })
 
-    return v_alertas
+    return v_resultados

@@ -25,7 +25,7 @@ def validar_permiso_reportes(p_sesion):
     autenticacion del sistema.
     """
 
-    if not isinstance(p_sesion, dict):
+    if ( not isinstance(p_sesion, dict) or p_sesion.get("id_usuario") is None):
         raise PermissionError(
             "Se requiere una sesion valida."
         )
@@ -62,8 +62,6 @@ def reporte_top_productos(p_sesion):
                     dv.cantidad * dv.precio_unitario
                 ) AS ingresos_totales
             FROM detalle_venta AS dv
-            JOIN venta AS v
-                ON dv.id_venta = v.id_venta
             GROUP BY
                 dv.id_plato
         )

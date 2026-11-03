@@ -5,7 +5,19 @@
 # =====================================================
 
 from decimal import Decimal, InvalidOperation
+from funcionalidades_py.conexion import obtener_conexion
 
+
+def entero_positivo(p_valor):
+    if isinstance(p_valor, bool) or not str(p_valor).isdigit():
+        raise ValueError("Debe ser un entero positivo.")
+
+    v_numero = int(p_valor)
+
+    if v_numero <= 0:
+        raise ValueError("Debe ser un entero positivo.")
+
+    return v_numero
 
 def validar_productos(p_productos):
     """
@@ -34,11 +46,6 @@ def validar_productos(p_productos):
             raise ValueError("El formato del producto no es valido.")
 
         try:
-            def entero_positivo(valor):
-                if isinstance(valor, bool) or not str(valor).isdigit():
-                    raise ValueError("Debe ser un entero positivo.")
-                return int(valor)
-
             v_id_plato = entero_positivo(v_producto["id_plato"])
             v_cantidad = entero_positivo(v_producto["cantidad"])
         except (KeyError, TypeError, ValueError, OverflowError):
@@ -89,9 +96,6 @@ def calcular_subtotal(p_cantidad, p_precio):
 
     return v_cantidad * v_precio
 
-from funcionalidades_py.conexion import obtener_conexion
-
-
 def consultar_menu():
     """
     Consulta los productos y precios actuales
@@ -134,6 +138,9 @@ def registrar_venta(p_conexion, p_sesion, p_datos):
         raise PermissionError(
             "No tiene permisos para registrar ventas."
         )
+    
+    if p_sesion.get("id_usuario") is None:
+        raise PermissionError("Se requiere una sesión autenticada.")
 
     if not isinstance(p_datos, dict):
         raise ValueError("Datos de venta invalidos.")

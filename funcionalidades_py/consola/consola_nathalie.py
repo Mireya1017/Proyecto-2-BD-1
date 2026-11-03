@@ -9,26 +9,8 @@
 # IMPORTACIONES - CONSOLA DE INVENTARIO Y VENTAS
 # Responsable: Nathalie
 # =====================================================
-
-from funcionalidades_py.inventario import (
-    consultar_existencias,
-    consultar_lotes,
-    consultar_alertas_existencias,
-    consultar_alertas_caducidad,
-    consultar_alertas_porcentaje,
-    registrar_entrada
-)
-
-from funcionalidades_py.transacciones import ejecutar_transaccion
-
-from funcionalidades_py.ventas import (
-    registrar_venta,
-    consultar_menu
-)
-
 from funcionalidades_py.reportes_nathalie import (
     reporte_top_productos,
-    reporte_caducidades_mensual,
     reporte_inventario_mensual
 )
 
@@ -75,6 +57,7 @@ def mostrar_existencias(p_sesion):
 
     for v_fila in v_resultados:
         print(
+            f"ID: {v_fila[0]} | "
             f"{v_fila[1]} | "
             f"Disponible: {v_fila[4]} {v_fila[2]} | "
             f"Minimo: {v_fila[3]}"
@@ -143,8 +126,9 @@ def mostrar_alertas(p_sesion):
                 f"Dias restantes: {v_fila[5]}"
             )
 
-    # 3. Porcentaje del inventario inicial
-    print("\n===== INVENTARIO RESPECTO AL 15 % INICIAL =====")
+    # 3. Porcentaje respecto al stock inicial de referencia
+    print("\n===== PORCENTAJE DEL INVENTARIO =====")
+    print("Referencia utilizada: cantidades de la carga inicial.")
 
     v_porcentajes = consultar_alertas_porcentaje(
         p_sesion,
@@ -152,20 +136,24 @@ def mostrar_alertas(p_sesion):
     )
 
     for v_fila in v_porcentajes:
+        v_porcentaje = v_fila["porcentaje"]
+
+        v_texto = (
+            f"{v_porcentaje}%"
+            if v_porcentaje is not None
+            else "Sin referencia"
+        )
+
         print(
             f"Insumo: {v_fila['insumo']} | "
             f"Disponible: {v_fila['existencia_actual']} "
             f"{v_fila['unidad']} | "
-            f"Porcentaje: {v_fila['porcentaje']}% | "
+            f"Porcentaje: {v_texto} | "
             f"Estado: {v_fila['estado']}"
         )
 
 
 def mostrar_registro_entrada(p_sesion):
-    """Registra una entrada mediante la transaccion compartida."""
-
-    validar_acceso_inventario(p_sesion)
-
     print("\n===== REGISTRAR ENTRADA DE INVENTARIO =====")
 
     v_sucursal = seleccionar_sucursal(p_sesion)
@@ -179,40 +167,18 @@ def mostrar_registro_entrada(p_sesion):
         "fecha_caducidad": input(
             "Fecha de caducidad (AAAA-MM-DD): "
         ).strip(),
-        "cantidad": input(
-            "Cantidad recibida: "
-        ).strip()
+        "cantidad": input("Cantidad recibida: ").strip()
     }
 
-    # Validar fechas antes de modificar PostgreSQL
-    from datetime import date
-
-    try:
-        v_recepcion = date.fromisoformat(
-            v_datos["fecha_recepcion"]
-        )
-        v_caducidad = date.fromisoformat(
-            v_datos["fecha_caducidad"]
-        )
-    except ValueError:
-        raise ValueError(
-            "Formato de fecha invalido. Utilice AAAA-MM-DD."
-        )
-
-    if v_caducidad < v_recepcion:
-        raise ValueError(
-            "La caducidad no puede ser anterior a la recepcion."
-        )
-
     print("\n===== CONFIRMAR ENTRADA =====")
-    print(f"Sucursal: {v_sucursal}")
+    print(f"Sucursal ID: {v_sucursal}")
     print(f"Insumo ID: {v_datos['id_insumo']}")
     print(f"Cantidad: {v_datos['cantidad']}")
-    print(f"Recepcion: {v_recepcion}")
-    print(f"Caducidad: {v_caducidad}")
+    print(f"Recepcion: {v_datos['fecha_recepcion']}")
+    print(f"Caducidad: {v_datos['fecha_caducidad']}")
 
     v_confirmacion = input(
-        "\nConfirmar registro (SI/NO): "
+        "Confirmar registro (SI/NO): "
     ).strip().upper()
 
     if v_confirmacion != "SI":
@@ -225,7 +191,7 @@ def mostrar_registro_entrada(p_sesion):
         v_datos
     )
 
-    print(f"\nEntrada registrada. ID del lote: {v_id_lote}")
+    print(f"Entrada registrada. ID del lote: {v_id_lote}")
 
 # =====================================================
 # REGISTRO DE VENTAS DESDE CONSOLA
