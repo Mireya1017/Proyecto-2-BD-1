@@ -935,11 +935,9 @@ El punto de entrada normal es:
 python -m funcionalidades_py.inicio
 ```
 
-Los archivos `prueba_*.py` y `preparar_*.py` son herramientas de desarrollo. Algunos crean datos, utilizan sesiones simuladas o están preparados para condiciones específicas.
+Los archivos prueba_*.py son herramientas de desarrollo.. Algunos crean datos, utilizan sesiones simuladas o están preparados para condiciones específicas.
 
 No ejecutarlos todos como parte de la instalación.
-
-En particular, `prueba_menu.py` omite la autenticación y no es el acceso normal del sistema.
 
 No se necesitan usuarios de prueba predefinidos para replicar la aplicación: el primer administrador se crea desde la pantalla de acceso.
 
