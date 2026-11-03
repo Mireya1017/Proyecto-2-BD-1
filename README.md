@@ -611,3 +611,21 @@ Queda pendiente:
 - Actualizar estas instrucciones al incorporar los módulos restantes.
 
 Los registros creados durante las pruebas son locales. Subir código a Git no sube los datos de PostgreSQL.
+
+
+
+### 12. Módulos implementados
+- `funcionalidades_py/usuarios.py`: Hash y verificación de contraseñas (`PBKDF2-HMAC-SHA256` con sal aleatoria de 16 bytes), creación inicial del primer administrador sin sesión previa (`id_usuario = NULL` en bitácora), registro de usuarios, inicio/cierre de sesión integrado con `sesion.py` y validación de permisos por rol y sucursal.
+- `funcionalidades_py/reservas.py`: Consulta compartida de disponibilidad de mesas por sucursal, horario y zona; registro, búsqueda, modificación (reemplazo de mesas en la misma transacción) y cancelación de reservas integrada con `ejecutar_transaccion`.
+- `funcionalidades_py/administracion.py`: Consulta de bitácora para administradores con filtros combinables y reporte de sucursales mediante CTEs.
+- `funcionalidades_py/consola_pablo.py`: Menús de consola desacoplados de la lógica de negocio listos para conectarse al menú principal.
+
+### 13. Creación del primer administrador e inicio de sesión
+Con la base de datos recién creada (sin usuarios en la carga inicial), ejecute `pantalla_configurar_primer_admin()` desde el menú inicial para registrar al primer administrador indicando su sucursal habitual. Posteriormente, inicie sesión con `pantalla_iniciar_sesion()`.
+
+### 14. Permisos aplicados en las operaciones
+- **Administrador**: Acceso a todas las sucursales, gestión de usuarios, consulta de bitácora y los cinco reportes.
+- **Gerente y Mesero**: Operaciones de reservas restringidas exclusivamente a su `id_sucursal` habitual.
+
+### 15. Criterio del Reporte de Sucursales
+El reporte calcula por separado las reservas no canceladas (`reservas_agrupadas`) y las ventas con su importe (`ventas_agrupadas` a partir de `venta`, `visita` y `detalle_venta`) utilizando expresiones de tabla comunes (`CTE`) antes de hacer `LEFT JOIN` con `sucursal`, evitando que el cruce entre reservas y ventas multiplique las cantidades o los importes vendidos.git 
