@@ -7,13 +7,28 @@
 from funcionalidades_py.conexion import obtener_conexion
 
 
-def consultar_existencias(p_id_sucursal):
+def validar_acceso_inventario(p_sesion, p_id_sucursal):
+    """Exige sesion confiable y limita gerente a su sucursal."""
+    if not isinstance(p_sesion, dict) or p_sesion.get("rol") not in ("administrador", "gerente"):
+        raise PermissionError("No tiene permisos para consultar inventario.")
+    if p_sesion.get("id_usuario") is None:
+        raise PermissionError("Se requiere una sesion autenticada.")
+    if isinstance(p_id_sucursal, bool) or not str(p_id_sucursal).isdigit() or int(p_id_sucursal) <= 0:
+        raise ValueError("Sucursal invalida.")
+    if p_sesion["rol"] == "gerente" and int(p_sesion["id_sucursal"]) != int(p_id_sucursal):
+        raise PermissionError("Solo puede consultar su sucursal.")
+    return int(p_id_sucursal)
+
+
+def consultar_existencias(p_id_sucursal, p_sesion):
     """
     Consulta las existencias utilizables de cada insumo
     en una sucursal determinada.
 
     No incluye cantidades de lotes vencidos.
     """
+
+    p_id_sucursal = validar_acceso_inventario(p_sesion, p_id_sucursal)
 
     v_sql = """
         SELECT
@@ -48,11 +63,13 @@ def consultar_existencias(p_id_sucursal):
             return v_cursor.fetchall()
 
 
-def consultar_lotes(p_id_sucursal, p_id_insumo):
+def consultar_lotes(p_id_sucursal, p_id_insumo, p_sesion):
     """
     Consulta los lotes de un insumo en una sucursal,
     incluyendo cantidades y fechas de caducidad.
     """
+
+    p_id_sucursal = validar_acceso_inventario(p_sesion, p_id_sucursal)
 
     v_sql = """
         SELECT
@@ -111,6 +128,8 @@ def registrar_entrada(p_conexion, p_sesion, p_datos):
     """
 
     # 1. Validar permisos
+    if not isinstance(p_sesion, dict) or p_sesion.get("id_usuario") is None:
+        raise PermissionError("Se requiere una sesion autenticada.")
     v_rol = p_sesion["rol"]
     v_sucursal_usuario = p_sesion["id_sucursal"]
     v_sucursal = int(p_datos["id_sucursal"])
@@ -120,7 +139,7 @@ def registrar_entrada(p_conexion, p_sesion, p_datos):
             "No tiene permisos para registrar entradas."
         )
 
-    if v_rol == "gerente" and v_sucursal != v_sucursal_usuario:
+    if v_rol == "gerente" and v_sucursal != int(v_sucursal_usuario):
         raise PermissionError(
             "Solo puede registrar entradas en su sucursal."
         )
@@ -139,6 +158,9 @@ def registrar_entrada(p_conexion, p_sesion, p_datos):
         raise ValueError(
             "La cantidad debe ser un numero positivo y finito."
         )
+
+    if v_cantidad > Decimal("999999999.999") or v_cantidad.as_tuple().exponent < -3:
+        raise ValueError("Cantidad fuera de precision NUMERIC(12,3).")
 
     if v_caducidad < v_recepcion:
         raise ValueError(
@@ -179,11 +201,13 @@ def registrar_entrada(p_conexion, p_sesion, p_datos):
 # Responsable: Nathalie
 # =====================================================
 
-def consultar_alertas_existencias(p_id_sucursal):
+def consultar_alertas_existencias(p_id_sucursal, p_sesion):
     """
     Devuelve los insumos cuya existencia utilizable
     es inferior al minimo establecido.
     """
+
+    p_id_sucursal = validar_acceso_inventario(p_sesion, p_id_sucursal)
 
     v_sql = """
         WITH existencias AS (
@@ -223,7 +247,7 @@ def consultar_alertas_existencias(p_id_sucursal):
             return v_cursor.fetchall()
 
 
-def consultar_alertas_caducidad(p_id_sucursal, p_dias=7):
+def consultar_alertas_caducidad(p_id_sucursal, p_dias=7, *, p_sesion):
     """
     Devuelve lotes proximos a caducar.
 
@@ -235,6 +259,8 @@ def consultar_alertas_caducidad(p_id_sucursal, p_dias=7):
 
     if p_dias < 0:
         raise ValueError("Los dias no pueden ser negativos.")
+
+    p_id_sucursal = validar_acceso_inventario(p_sesion, p_id_sucursal)
 
     v_sql = """
         SELECT

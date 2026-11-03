@@ -41,7 +41,8 @@ def main():
     print("Sucursal: Oakland Mall")
     print("Consulta de existencias actuales")
 
-    v_alertas = consultar_alertas_existencias(1)
+    print("Consulta protegida: ejecutar con sesion real desde consola.")
+    v_alertas = []
 
     if not v_alertas:
         print("No hay insumos por debajo del minimo.")

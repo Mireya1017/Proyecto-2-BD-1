@@ -34,8 +34,13 @@ def validar_productos(p_productos):
             raise ValueError("El formato del producto no es valido.")
 
         try:
-            v_id_plato = int(v_producto["id_plato"])
-            v_cantidad = int(v_producto["cantidad"])
+            def entero_positivo(valor):
+                if isinstance(valor, bool) or not str(valor).isdigit():
+                    raise ValueError("Debe ser un entero positivo.")
+                return int(valor)
+
+            v_id_plato = entero_positivo(v_producto["id_plato"])
+            v_cantidad = entero_positivo(v_producto["cantidad"])
         except (KeyError, TypeError, ValueError, OverflowError):
             raise ValueError(
                 "El identificador y la cantidad deben ser enteros."
@@ -112,7 +117,6 @@ def consultar_menu():
 # Responsable: Nathalie
 # =====================================================
 
-from datetime import date, datetime
 
 
 def registrar_venta(p_conexion, p_sesion, p_datos):
@@ -124,13 +128,17 @@ def registrar_venta(p_conexion, p_sesion, p_datos):
     """
 
     # 1. Validar permisos y datos de entrada
-    if p_sesion["rol"] not in (
+    if not isinstance(p_sesion, dict) or p_sesion.get("rol") not in (
         "administrador", "gerente", "mesero"
     ):
         raise PermissionError(
             "No tiene permisos para registrar ventas."
         )
 
+    if not isinstance(p_datos, dict):
+        raise ValueError("Datos de venta invalidos.")
+    if isinstance(p_datos.get("id_visita"), bool) or not str(p_datos.get("id_visita", "")).isdigit():
+        raise ValueError("La visita debe ser valida.")
     v_id_visita = int(p_datos["id_visita"])
 
     if v_id_visita <= 0:
@@ -160,7 +168,7 @@ def registrar_venta(p_conexion, p_sesion, p_datos):
 
         if (
             p_sesion["rol"] != "administrador"
-            and p_sesion["id_sucursal"] != v_id_sucursal
+            and int(p_sesion["id_sucursal"]) != v_id_sucursal
         ):
             raise PermissionError(
                 "No puede registrar ventas en otra sucursal."
