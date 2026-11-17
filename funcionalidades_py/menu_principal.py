@@ -27,7 +27,7 @@ def menu_principal(p_sesion):
 
     while True:
         print("\n" + "=" * 45)
-        print("       SISTEMA DE RESTAURANTE")
+        print("       POLLO A LA BRASA")
         print("=" * 45)
 
         print(f"Usuario ID: {p_sesion['id_usuario']}")
