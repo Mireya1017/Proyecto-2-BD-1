@@ -1,435 +1,510 @@
-# funcionalidades_py/reservas.py
+"""
+Módulo de Gestión de Reservas y Disponibilidad de Mesas.
+"""
+
 from datetime import datetime
-from funcionalidades_py.conexion import obtener_conexion
-from funcionalidades_py.transacciones import ejecutar_transaccion
-from funcionalidades_py.usuarios import validar_permiso, validar_acceso_sucursal
+from typing import Optional, List, Dict, Any
 
-ESTADOS_RESERVA = ("confirmada", "cancelada", "atendida", "no_asistio")
-ZONAS_MESA = ("interior", "exterior")
+from app.database import (
+    transaccion,
+    ErrorBaseDatos,
+    ErrorDisponibilidad,
+    ErrorCapacidad,
+    ErrorRestriccion,
+    ErrorNoEncontrado,
+    ErrorPermiso
+)
+from app.auth import SesionUsuario, validar_permisos_operacion
 
-def _validar_horario(p_inicio, p_fin):
-    try:
-        v_inicio = (
-            datetime.fromisoformat(p_inicio)
-            if isinstance(p_inicio, str)
-            else p_inicio
-        )
-
-        v_fin = (
-            datetime.fromisoformat(p_fin)
-            if isinstance(p_fin, str)
-            else p_fin
-        )
-    except ValueError:
-        raise ValueError(
-            "Ingrese fechas válidas con formato AAAA-MM-DD HH:MM."
-        )
-
-    if not isinstance(v_inicio, datetime) or not isinstance(v_fin, datetime):
-        raise ValueError("Debe indicar fecha y hora de inicio y fin.")
-
-    if v_fin <= v_inicio:
-        raise ValueError(
-            "La fecha y hora final debe ser posterior a la inicial."
-        )
+ADVISORY_LOCK_RESERVAS = 308802
 
 
-def consultar_mesas_disponibles(
-    p_id_sucursal: int,
-    p_fecha_hora_inicio: datetime | str,
-    p_fecha_hora_fin_estimada: datetime | str,
-    p_zona: str | None = None,
-    p_id_reserva_excluir: int | None = None,
-) -> list[dict]:
-    """
-    Devuelve las mesas disponibles de una sucursal para el horario indicado.
-    Reutilizable tanto en reservas como en el módulo de visitas antes de ocupar una mesa.
-    """
-    _validar_horario(
-        p_fecha_hora_inicio,
-        p_fecha_hora_fin_estimada
-    )
+def consultar_disponibilidad_mesas(
+    id_sucursal: int,
+    fecha_hora_inicio: datetime,
+    fecha_hora_fin: datetime,
+    zona: Optional[str] = None,
+    excluir_id_reserva: Optional[int] = None,
+    conn: Optional[Any] = None
+) -> List[Dict[str, Any]]:
+    """Consulta mesas libres de una sucursal en un rango horario."""
+    if fecha_hora_fin <= fecha_hora_inicio:
+        raise ValueError("La fecha y hora de fin estimada debe ser posterior al inicio.")
 
-    if p_zona and p_zona not in ZONAS_MESA:
-        raise ValueError(f"Zona inválida. Debe ser una de: {ZONAS_MESA}.")
+    if zona and zona not in ('interior', 'exterior'):
+        raise ValueError("La zona debe ser 'interior' o 'exterior'.")
 
-    v_conexion = obtener_conexion()
-    try:
-        with v_conexion.cursor() as v_cur:
-            v_cur.execute(
-                """
-                SELECT m.id_mesa, m.numero, m.capacidad, m.zona
+    with transaccion(conn) as c:
+        with c.cursor() as cur:
+            query = """
+                SELECT 
+                    m.id_mesa,
+                    m.id_sucursal,
+                    m.numero,
+                    m.capacidad,
+                    m.zona
                 FROM mesa m
-                WHERE m.id_sucursal = %s::integer
-                  AND (%s::varchar IS NULL OR m.zona = %s::varchar)
+                WHERE m.id_sucursal = %s
+                  AND (%s IS NULL OR m.zona = %s)
                   AND NOT EXISTS (
                       SELECT 1
                       FROM reserva_mesa rm
                       JOIN reserva r ON r.id_reserva = rm.id_reserva
                       WHERE rm.id_mesa = m.id_mesa
                         AND r.estado IN ('confirmada', 'atendida')
-                        AND (%s::integer IS NULL OR r.id_reserva <> %s::integer)
-                        AND r.fecha_hora_inicio < %s::timestamp
-                        AND r.fecha_hora_fin_estimada > %s::timestamp
+                        AND r.fecha_hora_inicio < %s
+                        AND r.fecha_hora_fin_estimada > %s
+                        AND (%s::INTEGER IS NULL OR r.id_reserva <> %s)
                   )
                 ORDER BY m.zona ASC, m.numero ASC;
-                """,
+            """
+            cur.execute(
+                query,
                 (
-                    int(p_id_sucursal),
-                    p_zona,
-                    p_zona,
-                    p_id_reserva_excluir,
-                    p_id_reserva_excluir,
-                    p_fecha_hora_fin_estimada,
-                    p_fecha_hora_inicio,
-                ),
+                    id_sucursal,
+                    zona,
+                    zona,
+                    fecha_hora_fin,
+                    fecha_hora_inicio,
+                    excluir_id_reserva,
+                    excluir_id_reserva
+                )
             )
-            v_cols = [d[0] for d in v_cur.description]
-            return [dict(zip(v_cols, f)) for f in v_cur.fetchall()]
-    finally:
-        v_conexion.close()
+            cols = [desc[0] for desc in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
 
 
-def _validar_mesas_en_transaccion(
-    p_cursor,
-    p_id_sucursal: int,
-    p_cantidad_personas: int,
-    p_ids_mesas: list[int],
-    p_inicio,
-    p_fin,
-    p_id_reserva_excluir: int | None = None,
-) -> None:
-    """Verifica sucursal, misma zona, capacidad suficiente y horario sin superposición."""
-    _validar_horario(p_inicio, p_fin)
-    if not p_ids_mesas:
+def sugerir_mesas_adecuadas(
+    mesas_disponibles: List[Dict[str, Any]],
+    cantidad_personas: int,
+    zona_preferida: Optional[str] = None
+) -> List[List[Dict[str, Any]]]:
+    """Sugerencia de mesas en la misma zona con capacidad suficiente."""
+    if cantidad_personas <= 0:
+        return []
+
+    zonas_a_evaluar = [zona_preferida] if zona_preferida else ['interior', 'exterior']
+    sugerencias = []
+
+    for z in zonas_a_evaluar:
+        mesas_zona = [m for m in mesas_disponibles if m['zona'] == z]
+        individuales = [m for m in mesas_zona if m['capacidad'] >= cantidad_personas]
+        individuales.sort(key=lambda x: x['capacidad'])
+        for ind in individuales:
+            sugerencias.append([ind])
+
+        if not sugerencias:
+            mesas_zona.sort(key=lambda x: x['capacidad'], reverse=True)
+            combo = []
+            acumulado = 0
+            for m in mesas_zona:
+                combo.append(m)
+                acumulado += m['capacidad']
+                if acumulado >= cantidad_personas:
+                    sugerencias.append(list(combo))
+                    break
+
+    return sugerencias
+
+
+def crear_reserva(
+    id_cliente: int,
+    id_sucursal: int,
+    fecha_hora_inicio: datetime,
+    fecha_hora_fin_estimada: datetime,
+    cantidad_personas: int,
+    ids_mesas: List[int],
+    sesion: Optional[SesionUsuario] = None,
+    conn: Optional[Any] = None
+) -> int:
+    """Registra una reserva con sus mesas asignadas de forma atómica."""
+    validar_permisos_operacion(
+        sesion,
+        roles_permitidos=["administrador", "gerente", "mesero"],
+        id_sucursal_operacion=id_sucursal
+    )
+
+    if cantidad_personas <= 0:
+        raise ValueError("La cantidad de personas debe ser mayor que cero.")
+
+    if fecha_hora_fin_estimada <= fecha_hora_inicio:
+        raise ValueError("La fecha/hora de fin estimada debe ser posterior a la de inicio.")
+
+    if not ids_mesas:
         raise ValueError("Debe asignar al menos una mesa a la reserva.")
 
-    v_ids_unicos = list(dict.fromkeys(int(x) for x in p_ids_mesas))
-    if len(v_ids_unicos) != len(p_ids_mesas):
-        raise ValueError("No se puede repetir una misma mesa dentro de la misma reserva.")
+    ids_mesas_unicos = list(dict.fromkeys(ids_mesas))
+    id_auditoria = sesion.id_usuario if sesion else None
 
-    p_cursor.execute(
-        """
-        SELECT id_mesa, id_sucursal, numero, capacidad, zona
-        FROM mesa
-        WHERE id_mesa = ANY(%s::integer[]);
-        """,
-        (v_ids_unicos,),
-    )
-    v_filas = p_cursor.fetchall()
-    if len(v_filas) != len(v_ids_unicos):
-        raise ValueError("Una o más mesas seleccionadas no existen.")
+    with transaccion(conn, id_usuario=id_auditoria) as c:
+        with c.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s);", (ADVISORY_LOCK_RESERVAS,))
 
-    v_zonas = set()
-    v_capacidad_total = 0
-    for v_id_mesa, v_id_suc_mesa, v_numero, v_capacidad, v_zona in v_filas:
-        if v_id_suc_mesa != p_id_sucursal:
-            raise ValueError(
-                f"La mesa #{v_numero} (ID {v_id_mesa}) no pertenece a la sucursal {p_id_sucursal}."
-            )
-        v_zonas.add(v_zona)
-        v_capacidad_total += v_capacidad
+            cur.execute("SELECT id_cliente FROM cliente WHERE id_cliente = %s;", (id_cliente,))
+            if not cur.fetchone():
+                raise ErrorNoEncontrado(f"El cliente con ID {id_cliente} no existe.")
 
-    if len(v_zonas) > 1:
-        raise ValueError("Todas las mesas de una reserva deben pertenecer a una misma zona.")
+            cur.execute("SELECT id_sucursal FROM sucursal WHERE id_sucursal = %s;", (id_sucursal,))
+            if not cur.fetchone():
+                raise ErrorNoEncontrado(f"La sucursal con ID {id_sucursal} no existe.")
 
-    if v_capacidad_total < p_cantidad_personas:
-        raise ValueError(
-            f"Capacidad insuficiente: las mesas seleccionadas suman {v_capacidad_total} "
-            f"lugares para {p_cantidad_personas} personas."
-        )
-
-    p_cursor.execute(
-        """
-        SELECT m.numero, r.id_reserva, r.fecha_hora_inicio, r.fecha_hora_fin_estimada
-        FROM reserva_mesa rm
-        JOIN reserva r ON r.id_reserva = rm.id_reserva
-        JOIN mesa m ON m.id_mesa = rm.id_mesa
-        WHERE rm.id_mesa = ANY(%s::integer[])
-          AND r.estado IN ('confirmada', 'atendida')
-          AND (%s::integer IS NULL OR r.id_reserva <> %s::integer)
-          AND r.fecha_hora_inicio < %s::timestamp
-          AND r.fecha_hora_fin_estimada > %s::timestamp
-        LIMIT 1;
-        """,
-        (v_ids_unicos, p_id_reserva_excluir, p_id_reserva_excluir, p_fin, p_inicio),
-    )
-    v_conflicto = p_cursor.fetchone()
-    if v_conflicto:
-        v_num_mesa, v_id_res_conf, v_ini_conf, v_fin_conf = v_conflicto
-        raise ValueError(
-            f"La mesa #{v_num_mesa} ya tiene la reserva #{v_id_res_conf} "
-            f"de {v_ini_conf} a {v_fin_conf}."
-        )
-
-
-def op_registrar_reserva(p_conexion, p_sesion: dict, p_datos: dict) -> int:
-    """
-    Operación transaccional que guarda la reserva y sus mesas en la misma transacción.
-    """
-    validar_permiso(p_sesion, ("administrador", "gerente", "mesero"))
-    v_id_sucursal = validar_acceso_sucursal(p_sesion, p_datos.get("id_sucursal"))
-
-    v_id_cliente = p_datos.get("id_cliente")
-    v_inicio = p_datos.get("fecha_hora_inicio")
-    v_fin = p_datos.get("fecha_hora_fin_estimada")
-    v_personas = int(p_datos.get("cantidad_personas", 0))
-    v_ids_mesas = p_datos.get("ids_mesas") or []
-
-    if not v_id_cliente:
-        raise ValueError("Debe indicar el cliente principal de la reserva.")
-    if v_personas <= 0:
-        raise ValueError("La cantidad de personas debe ser mayor que cero.")
-    if not v_inicio or not v_fin:
-        raise ValueError("Debe especificar fecha y hora de inicio y fin estimado.")
-
-    with p_conexion.cursor() as v_cur:
-        v_cur.execute("SELECT 1 FROM cliente WHERE id_cliente = %s::integer;", (int(v_id_cliente),))
-        if not v_cur.fetchone():
-            raise ValueError(f"El cliente con ID {v_id_cliente} no existe.")
-
-        _validar_mesas_en_transaccion(
-            v_cur, v_id_sucursal, v_personas, v_ids_mesas, v_inicio, v_fin
-        )
-
-        v_cur.execute(
-            """
-            INSERT INTO reserva (
-                id_cliente, id_sucursal, fecha_hora_inicio,
-                fecha_hora_fin_estimada, cantidad_personas, estado
-            )
-            VALUES (%s::integer, %s::integer, %s::timestamp, %s::timestamp, %s::integer, 'confirmada')
-            RETURNING id_reserva;
-            """,
-            (int(v_id_cliente), v_id_sucursal, v_inicio, v_fin, v_personas),
-        )
-        v_id_reserva = v_cur.fetchone()[0]
-
-        for v_id_mesa in v_ids_mesas:
-            v_cur.execute(
-                "INSERT INTO reserva_mesa (id_reserva, id_mesa) VALUES (%s::integer, %s::integer);",
-                (v_id_reserva, int(v_id_mesa)),
-            )
-
-        return v_id_reserva
-
-
-def registrar_reserva(p_sesion: dict, p_datos: dict) -> int:
-    """Registra una reserva y sus mesas usando ejecutar_transaccion."""
-    return ejecutar_transaccion(p_sesion, op_registrar_reserva, p_datos)
-
-
-def op_modificar_reserva(p_conexion, p_sesion: dict, p_datos: dict) -> bool:
-    """
-    Modifica una reserva confirmada. Si cambian las mesas, retira las anteriores
-    e inserta las nuevas antes del mismo COMMIT.
-    """
-    validar_permiso(p_sesion, ("administrador", "gerente", "mesero"))
-    v_id_reserva = p_datos.get("id_reserva")
-    if not v_id_reserva:
-        raise ValueError("Debe indicar el identificador de la reserva a modificar.")
-
-    with p_conexion.cursor() as v_cur:
-        v_cur.execute(
-            """
-            SELECT id_sucursal, fecha_hora_inicio, fecha_hora_fin_estimada,
-                   cantidad_personas, estado
-            FROM reserva
-            WHERE id_reserva = %s::integer;
-            """,
-            (int(v_id_reserva),),
-        )
-        v_actual = v_cur.fetchone()
-        if not v_actual:
-            raise ValueError(f"La reserva #{v_id_reserva} no existe.")
-
-        v_id_suc, v_ini_act, v_fin_act, v_cant_act, v_estado_act = v_actual
-        validar_acceso_sucursal(p_sesion, v_id_suc)
-
-        if v_estado_act != "confirmada":
-            raise ValueError(
-                f"Solo se pueden modificar reservas en estado 'confirmada' (actual: '{v_estado_act}')."
-            )
-
-        v_nuevo_ini = p_datos.get("fecha_hora_inicio") or v_ini_act
-        v_nuevo_fin = p_datos.get("fecha_hora_fin_estimada") or v_fin_act
-
-        v_nueva_cant = int(
-            p_datos.get("cantidad_personas", v_cant_act)
-        )
-
-        if v_nueva_cant <= 0:
-            raise ValueError(
-                "La cantidad de personas debe ser mayor que cero."
-            )
-
-        v_nuevas_mesas = p_datos.get("ids_mesas")
-
-        if v_nuevas_mesas is None:
-            v_cur.execute(
-                """
-                SELECT id_mesa
-                FROM reserva_mesa
-                WHERE id_reserva = %s;
+            placeholders = ",".join(["%s"] * len(ids_mesas_unicos))
+            cur.execute(
+                f"""
+                SELECT id_mesa, id_sucursal, capacidad, zona
+                FROM mesa
+                WHERE id_mesa IN ({placeholders});
                 """,
-                (int(v_id_reserva),)
+                ids_mesas_unicos
             )
+            mesas = cur.fetchall()
 
-            v_nuevas_mesas = [
-                v_fila[0] for v_fila in v_cur.fetchall()
-            ]
+            if len(mesas) != len(ids_mesas_unicos):
+                raise ErrorNoEncontrado("Una o más de las mesas indicadas no existen.")
 
-        _validar_mesas_en_transaccion(
-            v_cur,
-            v_id_suc,
-            v_nueva_cant,
-            v_nuevas_mesas,
-            v_nuevo_ini,
-            v_nuevo_fin,
-            p_id_reserva_excluir=int(v_id_reserva),
-        )
+            zonas = set()
+            capacidad_total = 0
+            for mid, msucursal, mcapacidad, mzona in mesas:
+                if msucursal != id_sucursal:
+                    raise ErrorRestriccion(f"La mesa con ID {mid} no pertenece a la sucursal {id_sucursal}.")
+                zonas.add(mzona)
+                capacidad_total += mcapacidad
 
-        v_cur.execute(
-            """
-            UPDATE reserva
-            SET fecha_hora_inicio = %s::timestamp,
-                fecha_hora_fin_estimada = %s::timestamp,
-                cantidad_personas = %s::integer
-            WHERE id_reserva = %s::integer;
-            """,
-            (v_nuevo_ini, v_nuevo_fin, v_nueva_cant, int(v_id_reserva)),
-        )
+            if len(zonas) > 1:
+                raise ErrorRestriccion(
+                    f"Mesas incompatibles: Se asignaron mesas de diferentes zonas ({', '.join(zonas)}). "
+                    "Todas las mesas deben ser de una misma zona."
+                )
 
-        v_cur.execute("DELETE FROM reserva_mesa WHERE id_reserva = %s::integer;", (int(v_id_reserva),))
-        for v_id_mesa in v_nuevas_mesas:
-            v_cur.execute(
-                "INSERT INTO reserva_mesa (id_reserva, id_mesa) VALUES (%s::integer, %s::integer);",
-                (int(v_id_reserva), int(v_id_mesa)),
+            if capacidad_total < cantidad_personas:
+                raise ErrorCapacidad(
+                    f"Capacidad insuficiente: Las mesas seleccionadas admiten {capacidad_total} personas "
+                    f"y la reserva requiere {cantidad_personas}."
+                )
+
+            cur.execute(
+                f"""
+                SELECT rm.id_mesa
+                FROM reserva_mesa rm
+                JOIN reserva r ON r.id_reserva = rm.id_reserva
+                WHERE rm.id_mesa IN ({placeholders})
+                  AND r.estado IN ('confirmada', 'atendida')
+                  AND r.fecha_hora_inicio < %s
+                  AND r.fecha_hora_fin_estimada > %s
+                LIMIT 1;
+                """,
+                ids_mesas_unicos + [fecha_hora_fin_estimada, fecha_hora_inicio]
             )
+            conflicto = cur.fetchone()
+            if conflicto:
+                raise ErrorDisponibilidad(
+                    f"Conflicto de horario: La mesa ID {conflicto[0]} ya está reservada en el rango solicitado."
+                )
 
-        return True
-
-
-def modificar_reserva(p_sesion: dict, p_datos: dict) -> bool:
-    """Modifica una reserva mediante ejecutar_transaccion."""
-    return ejecutar_transaccion(p_sesion, op_modificar_reserva, p_datos)
-
-
-def op_cambiar_estado_reserva(p_conexion, p_sesion: dict, p_datos: dict) -> bool:
-    """
-    Cambia el estado de una reserva a 'cancelada' o 'no_asistio',
-    conservando sus asignaciones históricas en reserva_mesa.
-    """
-    validar_permiso(p_sesion, ("administrador", "gerente", "mesero"))
-    v_id_reserva = p_datos.get("id_reserva")
-    v_nuevo_estado = p_datos.get("nuevo_estado", "cancelada")
-
-    if v_nuevo_estado not in ("cancelada", "no_asistio"):
-        raise ValueError("Estado no permitido en esta operación.")
-
-    with p_conexion.cursor() as v_cur:
-        v_cur.execute(
-            "SELECT id_sucursal, estado FROM reserva WHERE id_reserva = %s::integer;",
-            (int(v_id_reserva),),
-        )
-        v_fila = v_cur.fetchone()
-        if not v_fila:
-            raise ValueError(f"La reserva #{v_id_reserva} no existe.")
-
-        v_id_sucursal, v_estado_actual = v_fila
-        validar_acceso_sucursal(p_sesion, v_id_sucursal)
-
-        if v_estado_actual == "atendida":
-            raise ValueError("No se puede anular una reserva que ya fue atendida.")
-        if v_estado_actual == v_nuevo_estado:
-            raise ValueError(f"La reserva ya tiene el estado '{v_nuevo_estado}'.")
-
-        v_cur.execute(
-            "UPDATE reserva SET estado = %s::varchar WHERE id_reserva = %s::integer;",
-            (v_nuevo_estado, int(v_id_reserva)),
-        )
-        return True
-
-
-def cancelar_reserva(p_sesion: dict, p_id_reserva: int) -> bool:
-    """Cancela una reserva manteniendo sus mesas históricas."""
-    return ejecutar_transaccion(
-        p_sesion,
-        op_cambiar_estado_reserva,
-        {"id_reserva": p_id_reserva, "nuevo_estado": "cancelada"},
-    )
-
-
-def buscar_reservas(p_sesion: dict, p_filtros: dict | None = None) -> list[dict]:
-    """Busca reservas con filtros opcionales de sucursal, cliente, estado y fechas."""
-    validar_permiso(p_sesion, ("administrador", "gerente", "mesero"))
-    v_filtros = p_filtros or {}
-
-    if p_sesion["rol"] == "administrador":
-        v_id_sucursal = v_filtros.get("id_sucursal")
-    else:
-        v_id_sucursal = p_sesion["id_sucursal"]
-
-    v_id_cliente = v_filtros.get("id_cliente")
-    v_estado = v_filtros.get("estado")
-    v_desde = v_filtros.get("fecha_desde")
-    v_hasta = v_filtros.get("fecha_hasta")
-
-    v_conexion = obtener_conexion()
-    try:
-        with v_conexion.cursor() as v_cur:
-            v_cur.execute(
+            cur.execute(
                 """
-                SELECT r.id_reserva,
-                       r.id_cliente,
-                       c.nombre AS nombre_cliente,
-                       c.telefono AS telefono_cliente,
-                       r.id_sucursal,
-                       s.nombre AS nombre_sucursal,
-                       r.fecha_hora_inicio,
-                       r.fecha_hora_fin_estimada,
-                       r.cantidad_personas,
-                       r.estado,
-                       COALESCE(
-                           STRING_AGG(
-                               '#' || m.numero || ' (' || m.zona || ', cap:' || m.capacidad || ')',
-                               ', ' ORDER BY m.numero
-                           ),
-                           'Sin mesas'
-                       ) AS mesas_asignadas
+                INSERT INTO reserva (
+                    id_cliente,
+                    id_sucursal,
+                    fecha_hora_inicio,
+                    fecha_hora_fin_estimada,
+                    cantidad_personas,
+                    estado
+                )
+                VALUES (%s, %s, %s, %s, %s, 'confirmada')
+                RETURNING id_reserva;
+                """,
+                (
+                    id_cliente,
+                    id_sucursal,
+                    fecha_hora_inicio,
+                    fecha_hora_fin_estimada,
+                    cantidad_personas
+                )
+            )
+            id_reserva = cur.fetchone()[0]
+
+            for mid in ids_mesas_unicos:
+                cur.execute(
+                    """
+                    INSERT INTO reserva_mesa (id_reserva, id_mesa)
+                    VALUES (%s, %s);
+                    """,
+                    (id_reserva, mid)
+                )
+
+            return id_reserva
+
+
+def buscar_reservas(
+    id_reserva: Optional[int] = None,
+    id_cliente: Optional[int] = None,
+    id_sucursal: Optional[int] = None,
+    fecha: Optional[datetime] = None,
+    estado: Optional[str] = None,
+    sesion: Optional[SesionUsuario] = None,
+    conn: Optional[Any] = None
+) -> List[Dict[str, Any]]:
+    """Busca reservas aplicando filtros opcionales."""
+    if sesion:
+        validar_permisos_operacion(
+            sesion,
+            roles_permitidos=["administrador", "gerente", "mesero"]
+        )
+        if not sesion.es_administrador:
+            id_sucursal = sesion.id_sucursal
+
+    with transaccion(conn) as c:
+        with c.cursor() as cur:
+            query = """
+                SELECT 
+                    r.id_reserva,
+                    r.id_cliente,
+                    c.nombre AS nombre_cliente,
+                    c.telefono AS telefono_cliente,
+                    r.id_sucursal,
+                    s.nombre AS nombre_sucursal,
+                    r.fecha_hora_inicio,
+                    r.fecha_hora_fin_estimada,
+                    r.cantidad_personas,
+                    r.estado,
+                    COALESCE(
+                        STRING_AGG(m.numero::TEXT, ', ' ORDER BY m.numero), 
+                        ''
+                    ) AS numeros_mesas,
+                    MAX(m.zona) AS zona_mesas
                 FROM reserva r
                 JOIN cliente c ON c.id_cliente = r.id_cliente
                 JOIN sucursal s ON s.id_sucursal = r.id_sucursal
                 LEFT JOIN reserva_mesa rm ON rm.id_reserva = r.id_reserva
                 LEFT JOIN mesa m ON m.id_mesa = rm.id_mesa
-                WHERE (%s::integer IS NULL OR r.id_sucursal = %s::integer)
-                  AND (%s::integer IS NULL OR r.id_cliente = %s::integer)
-                  AND (%s::varchar IS NULL OR r.estado = %s::varchar)
-                  AND (%s::timestamp IS NULL OR r.fecha_hora_inicio >= %s::timestamp)
-                  AND (%s::timestamp IS NULL OR r.fecha_hora_inicio <= %s::timestamp)
-                GROUP BY r.id_reserva, c.nombre, c.telefono, s.nombre
+                WHERE (%s::INTEGER IS NULL OR r.id_reserva = %s)
+                  AND (%s::INTEGER IS NULL OR r.id_cliente = %s)
+                  AND (%s::INTEGER IS NULL OR r.id_sucursal = %s)
+                  AND (%s::DATE IS NULL OR r.fecha_hora_inicio::DATE = %s::DATE)
+                  AND (%s::VARCHAR IS NULL OR r.estado = %s)
+                GROUP BY 
+                    r.id_reserva,
+                    r.id_cliente,
+                    c.nombre,
+                    c.telefono,
+                    r.id_sucursal,
+                    s.nombre,
+                    r.fecha_hora_inicio,
+                    r.fecha_hora_fin_estimada,
+                    r.cantidad_personas,
+                    r.estado
                 ORDER BY r.fecha_hora_inicio DESC, r.id_reserva DESC;
-                """,
+            """
+            cur.execute(
+                query,
                 (
-                    v_id_sucursal, v_id_sucursal,
-                    v_id_cliente, v_id_cliente,
-                    v_estado, v_estado,
-                    v_desde, v_desde,
-                    v_hasta, v_hasta,
-                ),
+                    id_reserva, id_reserva,
+                    id_cliente, id_cliente,
+                    id_sucursal, id_sucursal,
+                    fecha, fecha,
+                    estado, estado
+                )
             )
-            v_cols = [d[0] for d in v_cur.description]
-            return [dict(zip(v_cols, f)) for f in v_cur.fetchall()]
-    finally:
-        v_conexion.close()
+            cols = [desc[0] for desc in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
 
 
-def obtener_reservas_por_cliente(
-    p_sesion: dict,
-    p_id_cliente: int
-) -> list[dict]:
-    """Consulta las reservas del cliente respetando la sucursal."""
-    return buscar_reservas(
-        p_sesion,
-        {"id_cliente": p_id_cliente}
-    )
+def modificar_reserva(
+    id_reserva: int,
+    nueva_fecha_inicio: Optional[datetime] = None,
+    nueva_fecha_fin: Optional[datetime] = None,
+    nueva_cantidad_personas: Optional[int] = None,
+    nuevos_ids_mesas: Optional[List[int]] = None,
+    sesion: Optional[SesionUsuario] = None,
+    conn: Optional[Any] = None
+) -> None:
+    """Modifica una reserva retirando asignaciones previas y creando las nuevas atómicamente."""
+    id_auditoria = sesion.id_usuario if sesion else None
+
+    with transaccion(conn, id_usuario=id_auditoria) as c:
+        with c.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s);", (ADVISORY_LOCK_RESERVAS,))
+
+            cur.execute(
+                """
+                SELECT id_sucursal, fecha_hora_inicio, fecha_hora_fin_estimada, cantidad_personas, estado
+                FROM reserva
+                WHERE id_reserva = %s
+                FOR UPDATE;
+                """,
+                (id_reserva,)
+            )
+            reserva_actual = cur.fetchone()
+            if not reserva_actual:
+                raise ErrorNoEncontrado(f"No existe la reserva con ID {id_reserva}.")
+
+            id_sucursal_res, f_inicio_act, f_fin_act, personas_act, estado_act = reserva_actual
+
+            validar_permisos_operacion(
+                sesion,
+                roles_permitidos=["administrador", "gerente", "mesero"],
+                id_sucursal_operacion=id_sucursal_res
+            )
+
+            if estado_act in ('cancelada', 'atendida'):
+                raise ErrorRestriccion(f"No se puede modificar una reserva en estado '{estado_act}'.")
+
+            f_inicio = nueva_fecha_inicio or f_inicio_act
+            f_fin = nueva_fecha_fin or f_fin_act
+            personas = nueva_cantidad_personas or personas_act
+
+            if f_fin <= f_inicio:
+                raise ValueError("La fecha/hora de fin estimada debe ser posterior al inicio.")
+
+            if personas <= 0:
+                raise ValueError("La cantidad de personas debe ser mayor que cero.")
+
+            if nuevos_ids_mesas is not None:
+                if not nuevos_ids_mesas:
+                    raise ValueError("La reserva no puede quedar sin mesas asignadas.")
+
+                ids_unicos = list(dict.fromkeys(nuevos_ids_mesas))
+                placeholders = ",".join(["%s"] * len(ids_unicos))
+
+                cur.execute(
+                    f"SELECT id_mesa, id_sucursal, capacidad, zona FROM mesa WHERE id_mesa IN ({placeholders});",
+                    ids_unicos
+                )
+                mesas_db = cur.fetchall()
+
+                if len(mesas_db) != len(ids_unicos):
+                    raise ErrorNoEncontrado("Una o más mesas especificadas no existen.")
+
+                zonas = set()
+                capacidad_total = 0
+                for mid, msuc, mcap, mzona in mesas_db:
+                    if msuc != id_sucursal_res:
+                        raise ErrorRestriccion(f"La mesa {mid} no pertenece a la sucursal {id_sucursal_res}.")
+                    zonas.add(mzona)
+                    capacidad_total += mcap
+
+                if len(zonas) > 1:
+                    raise ErrorRestriccion("Todas las mesas asignadas deben pertenecer a la misma zona.")
+
+                if capacidad_total < personas:
+                    raise ErrorCapacidad(
+                        f"Capacidad insuficiente: Las mesas admiten {capacidad_total} personas y se requieren {personas}."
+                    )
+
+                cur.execute(
+                    f"""
+                    SELECT rm.id_mesa
+                    FROM reserva_mesa rm
+                    JOIN reserva r ON r.id_reserva = rm.id_reserva
+                    WHERE rm.id_mesa IN ({placeholders})
+                      AND r.id_reserva <> %s
+                      AND r.estado IN ('confirmada', 'atendida')
+                      AND r.fecha_hora_inicio < %s
+                      AND r.fecha_hora_fin_estimada > %s
+                    LIMIT 1;
+                    """,
+                    ids_unicos + [id_reserva, f_fin, f_inicio]
+                )
+                conflicto = cur.fetchone()
+                if conflicto:
+                    raise ErrorDisponibilidad(
+                        f"Conflicto de horario: La mesa ID {conflicto[0]} está ocupada por otra reserva en ese intervalo."
+                    )
+
+                cur.execute("DELETE FROM reserva_mesa WHERE id_reserva = %s;", (id_reserva,))
+                for mid in ids_unicos:
+                    cur.execute(
+                        "INSERT INTO reserva_mesa (id_reserva, id_mesa) VALUES (%s, %s);",
+                        (id_reserva, mid)
+                    )
+
+            cur.execute(
+                """
+                UPDATE reserva
+                SET fecha_hora_inicio = %s,
+                    fecha_hora_fin_estimada = %s,
+                    cantidad_personas = %s
+                WHERE id_reserva = %s;
+                """,
+                (f_inicio, f_fin, personas, id_reserva)
+            )
+
+
+def cancelar_reserva(
+    id_reserva: int,
+    sesion: Optional[SesionUsuario] = None,
+    conn: Optional[Any] = None
+) -> None:
+    """Cancela una reserva activa, conservando su registro y asignaciones históricas."""
+    id_auditoria = sesion.id_usuario if sesion else None
+
+    with transaccion(conn, id_usuario=id_auditoria) as c:
+        with c.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s);", (ADVISORY_LOCK_RESERVAS,))
+
+            cur.execute(
+                "SELECT id_sucursal, estado FROM reserva WHERE id_reserva = %s FOR UPDATE;",
+                (id_reserva,)
+            )
+            fila = cur.fetchone()
+            if not fila:
+                raise ErrorNoEncontrado(f"No existe la reserva con ID {id_reserva}.")
+
+            id_sucursal, estado_actual = fila
+
+            validar_permisos_operacion(
+                sesion,
+                roles_permitidos=["administrador", "gerente", "mesero"],
+                id_sucursal_operacion=id_sucursal
+            )
+
+            if estado_actual == 'cancelada':
+                raise ErrorRestriccion("La reserva ya se encuentra cancelada.")
+            if estado_actual == 'atendida':
+                raise ErrorRestriccion("No se puede cancelar una reserva que ya fue atendida.")
+
+            cur.execute(
+                "UPDATE reserva SET estado = 'cancelada' WHERE id_reserva = %s;",
+                (id_reserva,)
+            )
+
+
+def obtener_reservas_cliente(
+    id_cliente: int,
+    conn: Optional[Any] = None
+) -> List[Dict[str, Any]]:
+    """Función compartida para el módulo de Clientes e Historial (Yu-fong)."""
+    with transaccion(conn) as c:
+        with c.cursor() as cur:
+            query = """
+                SELECT 
+                    r.id_reserva,
+                    r.id_sucursal,
+                    s.nombre AS nombre_sucursal,
+                    r.fecha_hora_inicio,
+                    r.fecha_hora_fin_estimada,
+                    r.cantidad_personas,
+                    r.estado,
+                    COALESCE(
+                        STRING_AGG(m.numero::TEXT, ', ' ORDER BY m.numero), 
+                        ''
+                    ) AS mesas
+                FROM reserva r
+                JOIN sucursal s ON s.id_sucursal = r.id_sucursal
+                LEFT JOIN reserva_mesa rm ON rm.id_reserva = r.id_reserva
+                LEFT JOIN mesa m ON m.id_mesa = rm.id_mesa
+                WHERE r.id_cliente = %s
+                GROUP BY 
+                    r.id_reserva,
+                    r.id_sucursal,
+                    s.nombre,
+                    r.fecha_hora_inicio,
+                    r.fecha_hora_fin_estimada,
+                    r.cantidad_personas,
+                    r.estado
+                ORDER BY r.fecha_hora_inicio DESC;
+            """
+            cur.execute(query, (id_cliente,))
+            cols = [desc[0] for desc in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
