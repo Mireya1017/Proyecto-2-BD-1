@@ -30,7 +30,7 @@ def obtener_conexion(p_ruta_config):
             f"No existe el archivo de configuración: {v_ruta}"
         )
 
-    v_config = configparser.ConfigParser()
+    v_config = configparser.ConfigParser(interpolation=None)
     v_config.read(v_ruta, encoding="utf-8")
 
     if "postgresql" not in v_config:
