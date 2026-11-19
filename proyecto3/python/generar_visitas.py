@@ -15,7 +15,7 @@ from pathlib import Path
 try:
     from proyecto3.python.parametros import (
         FECHA_INICIO, FECHA_CORTE_EXCLUSIVA, SEMILLA_VISITAS,
-        VISITAS_SIN_RESERVA_POR_MES_SUCURSAL, HORA_APERTURA,
+        TOTAL_VISITAS, PESOS_DIA_SEMANA, PESOS_HORA, distribuir_total, HORA_APERTURA,
         HORA_CIERRE, HORA_ULTIMA_LLEGADA_SIN_RESERVA,
         DURACION_VISITA_MINUTOS_MIN, DURACION_VISITA_MINUTOS_MAX,
         DESFASE_LLEGADA_MINUTOS_MIN, DESFASE_LLEGADA_MINUTOS_MAX,
@@ -28,7 +28,7 @@ except ModuleNotFoundError as v_error:
         raise
     from parametros import (
         FECHA_INICIO, FECHA_CORTE_EXCLUSIVA, SEMILLA_VISITAS,
-        VISITAS_SIN_RESERVA_POR_MES_SUCURSAL, HORA_APERTURA,
+        TOTAL_VISITAS, PESOS_DIA_SEMANA, PESOS_HORA, distribuir_total, HORA_APERTURA,
         HORA_CIERRE, HORA_ULTIMA_LLEGADA_SIN_RESERVA,
         DURACION_VISITA_MINUTOS_MIN, DURACION_VISITA_MINUTOS_MAX,
         DESFASE_LLEGADA_MINUTOS_MIN, DESFASE_LLEGADA_MINUTOS_MAX,
@@ -269,11 +269,37 @@ def buscar_mesas_para_visita(
     )
 
 
+def obtener_cantidades_sin_reserva(
+    p_sucursales, p_reservas, p_fecha_inicio, p_fecha_corte_exclusiva
+):
+    """Completa el total global de visitas sin imponer 100 por sucursal/mes.
+
+    Cada reserva atendida origina una visita. Las restantes son sin reserva
+    y se distribuyen segun el volumen de reservas de cada sucursal/mes.
+    """
+    v_atendidas = sum(v_r['estado'] == 'atendida' for v_r in p_reservas)
+    v_total_sin = TOTAL_VISITAS - v_atendidas
+    if v_total_sin < 0:
+        raise ValueError('Las reservas atendidas superan TOTAL_VISITAS.')
+    v_conteos = Counter(
+        (v_r['id_sucursal'], v_r['fecha_hora_inicio'].year,
+         v_r['fecha_hora_inicio'].month) for v_r in p_reservas
+    )
+    v_claves = [
+        (v_sucursal, v_inicio.year, v_inicio.month)
+        for v_sucursal in sorted(p_sucursales)
+        for v_inicio, _ in obtener_meses(p_fecha_inicio, p_fecha_corte_exclusiva)
+    ]
+    v_pesos = [max(1, v_conteos[v_clave]) for v_clave in v_claves]
+    return distribuir_total(v_total_sin, v_claves, v_pesos)
+
+
 def planificar_visitas_sin_reserva(
     p_sucursales,
     p_mesas,
     p_visitas_reserva,
     p_asignaciones_reserva,
+    p_reservas,
     p_fecha_inicio,
     p_fecha_corte_exclusiva,
     p_aleatorio
@@ -303,14 +329,25 @@ def planificar_visitas_sin_reserva(
         datetime.min.time()
     )
 
+    v_cantidades = obtener_cantidades_sin_reserva(
+        p_sucursales, p_reservas, p_fecha_inicio, p_fecha_corte_exclusiva
+    )
+    v_minutos = list(range(v_hora_min, v_hora_max + 1))
+    v_pesos_minutos = [PESOS_HORA[v_minuto // 60] for v_minuto in v_minutos]
+
     for v_sucursal in sorted(p_sucursales):
         for v_inicio_mes, v_fin_mes in obtener_meses(
             p_fecha_inicio,
             p_fecha_corte_exclusiva
         ):
-            for _ in range(
-                VISITAS_SIN_RESERVA_POR_MES_SUCURSAL
-            ):
+            v_fechas = [
+                v_inicio_mes + timedelta(days=v_dia)
+                for v_dia in range((v_fin_mes - v_inicio_mes).days + 1)
+            ]
+            v_pesos_fechas = [PESOS_DIA_SEMANA[v_fecha.weekday()]
+                               for v_fecha in v_fechas]
+            v_cantidad = v_cantidades[(v_sucursal, v_inicio_mes.year, v_inicio_mes.month)]
+            for _ in range(v_cantidad):
                 v_personas = p_aleatorio.choices(
                     PERSONAS_POR_GRUPO,
                     weights=PROBABILIDADES_PERSONAS,
@@ -321,14 +358,12 @@ def planificar_visitas_sin_reserva(
                 v_dias = (v_fin_mes - v_inicio_mes).days + 1
 
                 for v_intento in range(500):
-                    v_fecha = v_inicio_mes + timedelta(
-                        days=p_aleatorio.randrange(v_dias)
-                    )
-
-                    v_minuto = p_aleatorio.randint(
-                        v_hora_min,
-                        v_hora_max
-                    )
+                    v_fecha = p_aleatorio.choices(
+                        v_fechas, weights=v_pesos_fechas, k=1
+                    )[0]
+                    v_minuto = p_aleatorio.choices(
+                        v_minutos, weights=v_pesos_minutos, k=1
+                    )[0]
 
                     v_llegada = datetime.combine(
                         v_fecha,
@@ -509,31 +544,6 @@ def generar_visitas_con_reserva(
     return v_visitas
 
 
-def generar_visitas_sin_reserva(p_sucursales, p_fecha_inicio, p_fecha_corte_exclusiva,
-                                 p_aleatorio, p_id_inicial):
-    v_visitas = []
-    v_id = p_id_inicial
-    v_hora_min = HORA_APERTURA.hour * 60 + HORA_APERTURA.minute
-    v_hora_max = (HORA_ULTIMA_LLEGADA_SIN_RESERVA.hour * 60
-                  + HORA_ULTIMA_LLEGADA_SIN_RESERVA.minute)
-    for v_sucursal in sorted(p_sucursales):
-        for v_inicio_mes, v_fin_mes in obtener_meses(p_fecha_inicio, p_fecha_corte_exclusiva):
-            v_dias = (v_fin_mes - v_inicio_mes).days + 1
-            for _ in range(VISITAS_SIN_RESERVA_POR_MES_SUCURSAL):
-                v_fecha = v_inicio_mes + timedelta(days=p_aleatorio.randrange(v_dias))
-                v_minuto = p_aleatorio.randint(v_hora_min, v_hora_max)
-                v_llegada = datetime.combine(v_fecha, datetime.min.time()) + timedelta(minutes=v_minuto)
-                v_salida = v_llegada + timedelta(minutes=p_aleatorio.randint(
-                    DURACION_VISITA_MINUTOS_MIN, DURACION_VISITA_MINUTOS_MAX))
-                v_personas = p_aleatorio.choices(PERSONAS_POR_GRUPO,
-                                                 weights=PROBABILIDADES_PERSONAS, k=1)[0]
-                v_visitas.append({'id_visita': v_id, 'id_sucursal': v_sucursal,
-                                  'id_reserva': None, 'fecha_hora_llegada': v_llegada,
-                                  'fecha_hora_salida': v_salida, 'cantidad_personas': v_personas})
-                v_id += 1
-    return v_visitas
-
-
 def validar_resultados(p_visitas, p_asignaciones, p_reservas, p_mesas,
                         p_fecha_inicio, p_fecha_corte_exclusiva):
     v_corte = datetime.combine(p_fecha_corte_exclusiva, datetime.min.time())
@@ -597,12 +607,18 @@ def validar_resultados(p_visitas, p_asignaciones, p_reservas, p_mesas,
         for v_anterior, v_siguiente in zip(v_intervalos, v_intervalos[1:]):
             if v_anterior[1] > v_siguiente[0]:
                 raise ValueError(f'Mesa {v_mesa_id}: visitas {v_anterior[2]} y {v_siguiente[2]} superpuestas')
-    v_esperadas = VISITAS_SIN_RESERVA_POR_MES_SUCURSAL
+    v_esperadas = obtener_cantidades_sin_reserva(
+        {v_m['id_sucursal'] for v_m in p_mesas}, p_reservas,
+        p_fecha_inicio, p_fecha_corte_exclusiva
+    )
+    if len(p_visitas) != TOTAL_VISITAS:
+        raise ValueError('Cantidad total de visitas incorrecta')
     v_conteos = Counter((v_v['id_sucursal'], v_v['fecha_hora_llegada'].year,
                          v_v['fecha_hora_llegada'].month) for v_v in p_visitas if v_v['id_reserva'] is None)
     for v_sucursal in {v_m['id_sucursal'] for v_m in p_mesas}:
         for v_mes_inicio, _ in obtener_meses(p_fecha_inicio, p_fecha_corte_exclusiva):
-            if v_conteos[(v_sucursal, v_mes_inicio.year, v_mes_inicio.month)] != v_esperadas:
+            v_clave = (v_sucursal, v_mes_inicio.year, v_mes_inicio.month)
+            if v_conteos[v_clave] != v_esperadas[v_clave]:
                 raise ValueError('Cantidad incorrecta de visitas sin reserva por mes y sucursal')
 
 
@@ -641,6 +657,7 @@ def planificar_con_reintentos(
                     p_mesas,
                     v_visitas_reserva,
                     v_asignaciones_reserva,
+                    p_reservas,
                     p_fecha_inicio,
                     p_fecha_corte_exclusiva,
                     v_aleatorio

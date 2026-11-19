@@ -1,4 +1,3 @@
-
 # ============================================================
 # PROYECTO 3 - GENERADOR DE RESERVAS
 # Responsable: Nathalie
@@ -30,9 +29,11 @@ from parametros import (
     HORA_PRIMERA_RESERVA,
     HORA_ULTIMA_RESERVA,
     DURACION_ESTIMADA_RESERVA_MINUTOS,
-    RESERVAS_ATENDIDAS_POR_MES_SUCURSAL,
-    RESERVAS_CANCELADAS_POR_MES_SUCURSAL,
-    RESERVAS_NO_ASISTIO_POR_MES_SUCURSAL,
+    TOTAL_RESERVAS, PESOS_MES, PESOS_DIA_SEMANA, PESOS_HORA,
+    FACTOR_VOLUMEN_MIN, FACTOR_VOLUMEN_MAX,
+    PROBABILIDAD_ATENCION_MIN, PROBABILIDAD_ATENCION_MAX,
+    PROPORCION_CANCELADAS_MIN, PROPORCION_CANCELADAS_MAX,
+    distribuir_total,
     PERSONAS_POR_GRUPO,
     PROBABILIDADES_PERSONAS,
     SEMILLA_RESERVAS
@@ -200,67 +201,60 @@ def generar_reservas_mes(
     p_anio,
     p_mes,
     p_horarios,
-    p_generador
+    p_generador,
+    p_cantidad
 ):
+    """Genera una cantidad variable de reservas, sin cuotas de estados.
+
+    Los pesos de mes, dia y hora son supuestos del escenario simulado.
+    Las mismas reglas se aplican a ambas sucursales.
     """
-    Genera las reservas de una sucursal y un mes.
-
-    Entradas:
-        ID de sucursal, anio, mes, horarios y
-        generador pseudoaleatorio.
-
-    Salida:
-        Lista de 200 reservas con estados,
-        personas y horarios validos.
-    """
-
     v_horarios_mes = [
         (v_inicio, v_fin)
         for v_inicio, v_fin in p_horarios
-        if v_inicio.year == p_anio
-        and v_inicio.month == p_mes
+        if v_inicio.year == p_anio and v_inicio.month == p_mes
     ]
-
-    v_estados = (
-        ["atendida"] * RESERVAS_ATENDIDAS_POR_MES_SUCURSAL
-        + ["cancelada"] * RESERVAS_CANCELADAS_POR_MES_SUCURSAL
-        + ["no_asistio"] * RESERVAS_NO_ASISTIO_POR_MES_SUCURSAL
-    )
-
-    if len(v_horarios_mes) < len(v_estados):
+    if p_cantidad > len(v_horarios_mes):
         raise ValueError(
-            "No hay suficientes horarios para generar las reservas."
+            f"No hay suficientes horarios para sucursal {p_id_sucursal}, "
+            f"mes {p_mes}: se solicitaron {p_cantidad}."
         )
 
-    # Seleccionar horarios sin repetirlos.
-    v_horarios_elegidos = p_generador.sample(
-        v_horarios_mes,
-        len(v_estados)
+    v_prob_atencion = p_generador.uniform(
+        PROBABILIDAD_ATENCION_MIN, PROBABILIDAD_ATENCION_MAX
     )
+    v_prob_cancelacion = (1 - v_prob_atencion) * p_generador.uniform(
+        PROPORCION_CANCELADAS_MIN, PROPORCION_CANCELADAS_MAX
+    )
+    v_prob_inasistencia = 1 - v_prob_atencion - v_prob_cancelacion
 
-    # Distribuir los estados entre diferentes horarios.
-    p_generador.shuffle(v_estados)
-
+    # Seleccion ponderada SIN reemplazo: no repite sucursal/fecha/hora.
+    v_pesos = [
+        PESOS_DIA_SEMANA[v_inicio.weekday()] * PESOS_HORA[v_inicio.hour]
+        for v_inicio, _ in v_horarios_mes
+    ]
     v_reservas = []
-
-    for (v_inicio, v_fin), v_estado in zip(
-        v_horarios_elegidos,
-        v_estados
-    ):
-        v_personas = p_generador.choices(
-            PERSONAS_POR_GRUPO,
-            weights=PROBABILIDADES_PERSONAS,
+    for _ in range(p_cantidad):
+        v_indice = p_generador.choices(
+            range(len(v_horarios_mes)), weights=v_pesos, k=1
+        )[0]
+        v_inicio, v_fin = v_horarios_mes.pop(v_indice)
+        v_pesos.pop(v_indice)
+        v_estado = p_generador.choices(
+            ['atendida', 'cancelada', 'no_asistio'],
+            weights=[v_prob_atencion, v_prob_cancelacion, v_prob_inasistencia],
             k=1
         )[0]
-
+        v_personas = p_generador.choices(
+            PERSONAS_POR_GRUPO, weights=PROBABILIDADES_PERSONAS, k=1
+        )[0]
         v_reservas.append({
-            "id_sucursal": p_id_sucursal,
-            "fecha_hora_inicio": v_inicio,
-            "fecha_hora_fin_estimada": v_fin,
-            "cantidad_personas": v_personas,
-            "estado": v_estado
+            'id_sucursal': p_id_sucursal,
+            'fecha_hora_inicio': v_inicio,
+            'fecha_hora_fin_estimada': v_fin,
+            'cantidad_personas': v_personas,
+            'estado': v_estado
         })
-
     return v_reservas
 
 
@@ -323,6 +317,19 @@ def generar_reservas(
         for v_inicio, _ in v_horarios
     })
 
+    # Solo el total del periodo es fijo; cada sucursal/mes varia.
+    v_claves = [
+        (v_id, v_anio, v_mes)
+        for v_id in v_ids_sucursales
+        for v_anio, v_mes in v_periodos
+    ]
+    v_pesos = [
+        PESOS_MES.get(v_mes, 1.0)
+        * v_generador.uniform(FACTOR_VOLUMEN_MIN, FACTOR_VOLUMEN_MAX)
+        for _, _, v_mes in v_claves
+    ]
+    v_cantidades = distribuir_total(TOTAL_RESERVAS, v_claves, v_pesos)
+
     for v_id_sucursal in v_ids_sucursales:
         for v_anio, v_mes in v_periodos:
 
@@ -331,7 +338,8 @@ def generar_reservas(
                 v_anio,
                 v_mes,
                 v_horarios,
-                v_generador
+                v_generador,
+                v_cantidades[(v_id_sucursal, v_anio, v_mes)]
             )
 
             v_reservas.extend(v_reservas_mes)

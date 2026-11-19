@@ -21,6 +21,18 @@ La distribución y el diseño del tablero se definirán posteriormente.
 - Oakland Mall.
 - Ciudad Cayalá.
 
+**Distribución actualizada del escenario simulado**
+
+Se conservan 2,400 reservas y 3,000 visitas en todo el período de mayo a octubre de 2026. Las cantidades por mes y sucursal son variables.
+
+Los estados de reserva se generan mediante probabilidades, sin exigir porcentajes finales exactos. Las visitas con reserva corresponden a las reservas atendidas; las visitas sin reserva completan el total general.
+
+La generación incorpora pesos mensuales, diarios y horarios documentados en parametros.py. Son supuestos de simulación, no patrones comprobados del restaurante real.
+
+Se mantienen las reglas de horarios, capacidad y ausencia de superposiciones.
+
+Quedan reemplazadas las cuotas anteriores de 200 reservas y 250 visitas mensuales por sucursal, así como los porcentajes obligatorios de 75 %, 12.5 % y 12.5 %.
+
 **Objetivo:**
 
 Analizar la demanda de atención, el comportamiento de las reservas, la duración de las visitas, la liberación de mesas y el aprovechamiento de la capacidad asignada para apoyar decisiones sobre la atención del restaurante.

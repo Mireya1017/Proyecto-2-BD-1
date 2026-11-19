@@ -78,6 +78,18 @@ Los parámetros compartidos se encuentran en `proyecto3/python/parametros.py`.
 
 **Período de generación:** desde el 1 de mayo de 2026, inclusive, hasta el 1 de noviembre de 2026, exclusivo.
 
+**Distribución actualizada del escenario simulado**
+
+Se conservan 2,400 reservas y 3,000 visitas en todo el período de mayo a octubre de 2026. Las cantidades por mes y sucursal son variables.
+
+Los estados de reserva se generan mediante probabilidades, sin exigir porcentajes finales exactos. Las visitas con reserva corresponden a las reservas atendidas; las visitas sin reserva completan el total general.
+
+La generación incorpora pesos mensuales, diarios y horarios documentados en parametros.py. Son supuestos de simulación, no patrones comprobados del restaurante real.
+
+Se mantienen las reglas de horarios, capacidad y ausencia de superposiciones.
+
+Quedan reemplazadas las cuotas anteriores de 200 reservas y 250 visitas mensuales por sucursal, así como los porcentajes obligatorios de 75 %, 12.5 % y 12.5 %.
+
 **Reservas por mes y sucursal:**
 
 | Estado | Cantidad |
